@@ -14,6 +14,8 @@ Read these before implementing anything:
 - `.kiro/specs/driving-licence-workflow/design.md` — technical design, interfaces, message contracts, saga definition, trade-offs
 - `.kiro/specs/driving-licence-workflow/tasks.md` — 14-task implementation plan with dependencies
 
+Check-off the task checklist as you progress
+
 ## Solution Structure
 
 ```

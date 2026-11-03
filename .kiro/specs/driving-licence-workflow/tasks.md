@@ -8,8 +8,8 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
 
 ## Tasks
 
-- [ ] 1. Solution scaffold [CORE]
-  - [ ] 1.1 Create .NET solution with 3 projects, project references, and NuGet packages
+- [x] 1. Solution scaffold [CORE]
+  - [x] 1.1 Create .NET solution with 3 projects, project references, and NuGet packages
     - Create `DrivingLicenceWorkflow.sln` with three projects:
       - `DrivingLicenceWorkflow.Api` — ASP.NET Core Web API
       - `DrivingLicenceWorkflow.Worker` — background service (console host)
@@ -22,7 +22,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
       - Tests: FsCheck, xUnit, MassTransit Test Harness, OpenTelemetry
     - _Requirements: 11.1, 11.4_
 
-  - [ ] 1.2 Create .gitignore and .env.example
+  - [x] 1.2 Create .gitignore and .env.example
     - Create `.gitignore` for .NET (bin, obj, user-specific files) with `.env` listed
     - Create `.env.example` with placeholder secrets:
       ```
@@ -33,12 +33,12 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
       ```
     - _Requirements: 11.1_
 
-  - [ ] 1.3 Create README stub with basic project description
+  - [x] 1.3 Create README stub with basic project description
     - Add project name, one-paragraph description, solution structure overview
     - _Requirements: 11.1_
 
-- [ ] 2. Docker Compose [CORE]
-  - [ ] 2.1 Create docker-compose.yml with 4 services
+- [x] 2. Docker Compose [CORE]
+  - [x] 2.1 Create docker-compose.yml with 4 services
     - Services: `api`, `worker`, `database` (PostgreSQL), `queue` (RabbitMQ)
     - `env_file: .env` directive on api and worker services
     - Healthchecks for database (`pg_isready`) and queue (RabbitMQ management plugin)
@@ -47,25 +47,25 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Port mappings: api on 8080, RabbitMQ management on 15672
     - _Requirements: 11.1, 11.2_
 
-  - [ ] 2.2 Create PostgreSQL init script for database roles
+  - [x] 2.2 Create PostgreSQL init script for database roles
     - SQL init script that creates `api_user` and `worker_user` roles with appropriate permissions on the `dl_system` database
     - `api_user`: INSERT/UPDATE/SELECT on Applications, AuditTrailEntry; full access to outbox tables
     - `worker_user`: full access to ApplicationWorkflowState, AuditTrailEntry; UPDATE on Applications.Status; full access to outbox/inbox tables
     - Mount init script via Docker volume in docker-compose.yml
     - _Requirements: 11.1_
 
-  - [ ] 2.3 Create Dockerfiles for api and worker projects
+  - [x] 2.3 Create Dockerfiles for api and worker projects
     - Multi-stage Dockerfiles: SDK image for build, runtime image for execution
     - Expose port 8080 on api Dockerfile
     - Set entry points for each project
     - _Requirements: 11.1_
 
-  - [ ] 2.4 Verify docker compose up works
+  - [x] 2.4 Verify docker compose up works
     - Run `docker compose up --build` and confirm all 4 services start and report healthy
     - Verify API responds on port 8080 and RabbitMQ management UI is accessible
     - _Requirements: 11.1, 11.2_
 
-  - [ ] 2.5 Update README with setup instructions
+  - [x] 2.5 Update README with setup instructions
     - Document `docker compose up` workflow, .env setup (copy .env.example), endpoint URLs, Swagger path
     - _Requirements: 11.1_
 

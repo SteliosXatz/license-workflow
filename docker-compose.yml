@@ -1,0 +1,72 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: DrivingLicenceWorkflow.Api/Dockerfile
+    env_file: .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__AppDb: "Host=database;Port=5432;Database=dl_system;Username=api_user;Password=${API_DB_PASSWORD:?Set API_DB_PASSWORD in .env}"
+      RabbitMQ__Host: queue
+      RabbitMQ__Username: workflow
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+    ports:
+      - "8080:8080"
+    depends_on:
+      database:
+        condition: service_healthy
+      queue:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: DrivingLicenceWorkflow.Worker/Dockerfile
+    env_file: .env
+    environment:
+      ConnectionStrings__WorkerDb: "Host=database;Port=5432;Database=dl_system;Username=worker_user;Password=${WORKER_DB_PASSWORD:?Set WORKER_DB_PASSWORD in .env}"
+      RabbitMQ__Host: queue
+      RabbitMQ__Username: workflow
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+    depends_on:
+      database:
+        condition: service_healthy
+      queue:
+        condition: service_healthy
+
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dl_system
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?Set API_DB_PASSWORD in .env}
+      WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD:?Set WORKER_DB_PASSWORD in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init/01-roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dl_system"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  queue:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: workflow
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_listener", "15672"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres_data:
