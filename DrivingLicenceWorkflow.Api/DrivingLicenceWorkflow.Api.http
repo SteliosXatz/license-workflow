@@ -1,0 +1,6 @@
+@DrivingLicenceWorkflow.Api_HostAddress = http://localhost:5237
+
+GET {{DrivingLicenceWorkflow.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

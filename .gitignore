@@ -39,6 +39,14 @@ ScaffoldingReadMe.txt
 # dotenv environment variables file
 .env
 
+# User-specific files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.idea/
+
 # Others
 ~$*
 *~
