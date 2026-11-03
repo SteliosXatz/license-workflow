@@ -69,8 +69,8 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document `docker compose up` workflow, .env setup (copy .env.example), endpoint URLs, Swagger path
     - _Requirements: 11.1_
 
-- [ ] 3. Domain models + DbContext + migrations [CORE]
-  - [ ] 3.1 Create domain models and entities
+- [x] 3. Domain models + DbContext + migrations [CORE]
+  - [x] 3.1 Create domain models and entities
     - `Application` entity with all properties from design doc: Id (Guid), FirstName, LastName, DateOfBirth, NationalId, Email, PhoneNumber, Address, LicenceCategory, PhotoBase64, Status (ApplicationStatus enum), RejectionReason (string?), PhotoQualityScore (int?), CreatedAt, UpdatedAt
     - `AuditTrailEntry` entity: Id (Guid), ApplicationId (Guid), Timestamp (DateTime), FromStatus (ApplicationStatus?), ToStatus (ApplicationStatus), Event (string), Details (string?)
     - `ApplicationWorkflowState` entity implementing `SagaStateMachineInstance`: CorrelationId (Guid), CurrentState (string), ApplicationId (Guid), PhotoQualityScore (int?), FailureReason (string?), RejectionReason (string?)
@@ -78,24 +78,24 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Configure EF Core relationships in model (Application → AuditTrailEntry one-to-many, Application → ApplicationWorkflowState one-to-one)
     - _Requirements: 5.1, 4.2, 5.3_
 
-  - [ ] 3.2 Create DrivingLicenceDbContext
+  - [x] 3.2 Create DrivingLicenceDbContext
     - Single `DbContext` class mapping all entities: Application, AuditTrailEntry, ApplicationWorkflowState
     - Add MassTransit outbox/inbox tables: `AddEntityFrameworkOutbox` integration (OutboxMessage, OutboxState, InboxState)
     - Configure table names, constraints, indexes (e.g., index on AuditTrailEntry.ApplicationId for history queries)
     - Both API and Worker will use this same DbContext class with different connection strings
     - _Requirements: 5.3, 9.3, 10.2_
 
-  - [ ] 3.3 Create EF Core migration
+  - [x] 3.3 Create EF Core migration
     - Generate initial migration from the DbContext
     - Ensure migration creates all entity tables and MassTransit outbox/inbox tables
     - _Requirements: 5.3_
 
-  - [ ] 3.4 Add in-place migration on startup in Program.cs
+  - [x] 3.4 Add in-place migration on startup in Program.cs
     - Add `db.Database.MigrateAsync()` call in API Program.cs (and optionally Worker) on startup
     - Include comment block explaining trade-offs: multi-node concurrent DDL conflict risk, production uses dedicated migration job/init container, migrations must be backward compatible (add columns nullable first, never destructive in same deployment)
     - _Requirements: 11.1_
 
-  - [ ] 3.5 Update README with data model notes
+  - [x] 3.5 Update README with data model notes
     - Document entity schema, DbContext approach (single shared context, different connection strings per project), migration strategy and trade-offs
     - _Requirements: 5.1, 5.3_
 
