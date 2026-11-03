@@ -32,12 +32,12 @@ THE Application_API SHALL accept the face photo as a base64-encoded string withi
 - **Rationale**: A single JSON request simplates the endpoint, request validation, and testing. No separate upload state to manage.
 - **Trade-off**: Base64 encoding adds ~33% size overhead and increases request body size and memory pressure. For a simplified system with small simulated photos this is acceptable; a production system handling large images would prefer multipart upload or a dedicated upload endpoint with streaming.
 
-### Workflow: Custom State Machine
+### Workflow: MassTransit Orchestration Saga (Automatonymous)
 
-THE Workflow_Engine SHALL implement a custom state machine without external workflow libraries (no MassTransit sagas, Elsa, Temporal, or Durable Task Framework).
+THE Workflow_Engine SHALL implement an orchestration saga using MassTransit with Automatonymous, not a custom state machine.
 
-- **Rationale**: The workflow is linear with a small fixed set of states and transitions. A custom state machine gives full control, zero external dependencies, and is fast to implement within the time budget.
-- **Trade-off**: No built-in saga persistence, distributed orchestration, or long-running workflow hosting. The system must manually persist state after each transition and handle crash recovery. A more complex workflow with branching, timers, or compensation would benefit from a dedicated framework.
+- **Rationale**: The saga provides step-level fault isolation (each step retries independently), automatic idempotency via state guards (duplicate messages to the wrong state are no-ops), native retry and dead-letter queue support through MassTransit consumer configuration, and a clear extensibility path for future async or external service steps. Each workflow step (data validation, photo check, risk assessment) is a separate consumer that sends completion events back to the saga, which coordinates the orchestration. MassTransit's test harness enables saga testing without a real broker.
+- **Trade-off**: More moving parts than a custom state machine (saga state instance, step consumers, 12 message contracts). The saga must persist its state and handle crash recovery. A pure custom state machine would be less code but gives no built-in retry, idempotency, or broker integration, and couples all steps into a single synchronous pipeline that is harder to extend with async or external service calls.
 
 ### Queue: RabbitMQ with MassTransit
 
