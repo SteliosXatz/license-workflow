@@ -1,5 +1,6 @@
 using DrivingLicenceWorkflow.Shared.Domain;
 using DrivingLicenceWorkflow.Shared.Messages;
+using DrivingLicenceWorkflow.Shared.Observability;
 using DrivingLicenceWorkflow.Shared.Services;
 using MassTransit;
 
@@ -8,6 +9,7 @@ namespace DrivingLicenceWorkflow.Shared.Sagas;
 public class ApplicationWorkflowStateMachine : MassTransitStateMachine<ApplicationWorkflowState>
 {
     private readonly IAuditService _auditService;
+    private readonly WorkflowStateMetrics _metrics;
 
     public State Submitted { get; private set; } = null!;
     public State ValidatingData { get; private set; } = null!;
@@ -28,9 +30,10 @@ public class ApplicationWorkflowStateMachine : MassTransitStateMachine<Applicati
     public Event<ManualReviewApproved> ManualReviewApproved { get; private set; } = null!;
     public Event<ManualReviewRejected> ManualReviewRejected { get; private set; } = null!;
 
-    public ApplicationWorkflowStateMachine(IAuditService auditService)
+    public ApplicationWorkflowStateMachine(IAuditService auditService, WorkflowStateMetrics metrics)
     {
         _auditService = auditService;
+        _metrics = metrics;
 
         InstanceState(state => state.CurrentState);
         SetCompletedWhenFinalized();
@@ -159,12 +162,15 @@ public class ApplicationWorkflowStateMachine : MassTransitStateMachine<Applicati
         ApplicationStatus toStatus,
         string eventName,
         string? details)
-        where TMessage : class =>
-        _auditService.RecordTransitionAsync(
+        where TMessage : class
+    {
+        _metrics.RecordTransition(fromStatus, toStatus);
+        return _auditService.RecordTransitionAsync(
             context.Saga.ApplicationId,
             fromStatus,
             toStatus,
             eventName,
             details,
             context.CancellationToken);
+    }
 }

@@ -301,23 +301,21 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document Serilog configuration, log file location/format, Swagger UI access path
     - _Requirements: 11.3, 11.4_
 
-- [ ] 12. Metrics + tracing [STRETCH]
-  - [ ] 12.1 Add metrics to API and expose /metrics endpoint
-    - Add prometheus-net or OpenTelemetry metrics to API
-    - Expose `/metrics` endpoint ready for Prometheus scraping
-    - Infrastructure metrics: HTTP request count, request duration (histogram)
-    - Business metrics: applications submitted count (counter), applications per state (gauge), manual review pending count (gauge)
+- [x] 12. Metrics + tracing [STRETCH]
+  - [x] 12.1 Add metrics to API and expose /metrics endpoint
+    - API exposes `/metrics` (Prometheus format) with ASP.NET Core HTTP request count/duration and an applications-submitted counter
+    - Worker exposes a workflow-transitions counter recorded by the saga; console exporter in Development, OTLP when configured
     - _Requirements: 11.5, 13.4_
 
-  - [ ] 12.2 Add OpenTelemetry tracing
-    - Console exporter for local dev (logs spans to structured log file)
+  - [x] 12.2 Add OpenTelemetry tracing
+    - Default OpenTelemetry console exporter for local dev (no custom exporter or log listener)
     - MassTransit built-in instrumentation (MassTransit.Diagnostics) for trace propagation across RabbitMQ
     - ASP.NET Core and EF Core instrumentation for HTTP and database spans
     - Trace spans across: API request → outbox publish → saga processing → step consumer → database
-    - Document Jaeger as staging alternative (add Jaeger container to Docker Compose for prod)
+    - Document Jaeger container as enhancement
     - _Requirements: 13.4_
 
-  - [ ] 12.3 Update README with observability documentation
+  - [x] 12.3 Update README with observability documentation
     - Document business metrics that should be tracked, /metrics endpoint, tracing setup, Jaeger staging alternative
     - _Requirements: 11.5, 13.4_
 

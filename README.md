@@ -32,6 +32,18 @@ Override the path with the `Logging__FilePath` environment variable (for example
 
 Swagger UI is available at <http://localhost:8080/swagger> in all environments. Controller XML comments are included in the generated OpenAPI document.
 
+### Metrics and tracing
+
+The API exposes OpenTelemetry metrics in Prometheus text format at <http://localhost:8080/metrics>. ASP.NET Core instrumentation records the HTTP request-duration histogram (whose sample count provides the request count), and the API adds:
+
+- `driving_licence_applications_submitted_total` — total successful submissions since the API process started.
+
+The Worker has no HTTP endpoint, so it prints metrics with the default console exporter in Development and pushes them over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. It records one showcase metric, recorded by the saga on each state transition:
+
+- `driving_licence_workflow_transitions` — transition count, labeled `from` and `to`.
+
+This is a showcase, not a full metric set. Both API and Worker enable EF Core and MassTransit tracing (plus ASP.NET Core on the API). In Development, spans are written by the default OpenTelemetry console exporter. Configure `OTEL_EXPORTER_OTLP_ENDPOINT` to additionally export traces over OTLP to a collector (for example, `http://jaeger:4317` for a Jaeger OTLP receiver). For staging, an optional Jaeger container with OTLP enabled can receive traces from both hosts; the container is intentionally not part of the default Compose setup. Production sampling defaults to 10%.
+
 ### Request/response logging
 
 The API uses ASP.NET Core's built-in HTTP logging (`AddPiiMaskedHttpLogging()` and `app.UseHttpLogging()`), so the request and response are written as a single structured log entry: method, path, query string, status code, duration, an allow-listed set of headers (`Content-Type`, `Content-Length`, `Accept`; all others show as `[Redacted]`) and the JSON bodies. Only `application/json` and `application/problem+json` bodies are captured, up to 1 MB each. Swagger paths are not logged. The `Microsoft.AspNetCore.HttpLogging` category is set to `Information` in the Serilog configuration, because the rest of `Microsoft.AspNetCore` is limited to `Warning`.

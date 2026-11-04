@@ -23,6 +23,7 @@ builder.Services.AddSerilog((_, loggerConfiguration) =>
 });
 
 builder.Services.AddApiServices(builder.Configuration);
+builder.Services.AddApiObservability(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
@@ -40,5 +41,6 @@ app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 app.MapControllers();
+app.MapPrometheusScrapingEndpoint();
 
 app.Run();

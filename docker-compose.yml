@@ -29,6 +29,7 @@ services:
       dockerfile: DrivingLicenceWorkflow.Worker/Dockerfile
     env_file: .env
     environment:
+      DOTNET_ENVIRONMENT: Development
       ConnectionStrings__WorkerDb: "Host=database;Port=5432;Database=dl_system;Username=worker_user;Password=${WORKER_DB_PASSWORD:?Set WORKER_DB_PASSWORD in .env}"
       RabbitMQ__Host: queue
       RabbitMQ__Username: workflow

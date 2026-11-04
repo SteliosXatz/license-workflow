@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using DrivingLicenceWorkflow.Api.Contracts;
 using DrivingLicenceWorkflow.Api.Controllers;
 using DrivingLicenceWorkflow.Api.Logging;
+using DrivingLicenceWorkflow.Api.Observability;
 using DrivingLicenceWorkflow.Api.Validators;
 using DrivingLicenceWorkflow.Shared.Data;
 using DrivingLicenceWorkflow.Shared.Services;
@@ -16,6 +17,7 @@ public static class ApiServiceCollectionExtensions
     public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddPiiMaskedHttpLogging();
+        services.AddSingleton<ApplicationWorkflowMetrics>();
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
         {

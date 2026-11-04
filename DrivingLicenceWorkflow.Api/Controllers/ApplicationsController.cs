@@ -1,4 +1,5 @@
 using DrivingLicenceWorkflow.Api.Contracts;
+using DrivingLicenceWorkflow.Api.Observability;
 using DrivingLicenceWorkflow.Api.Validators;
 using DrivingLicenceWorkflow.Shared.Data;
 using DrivingLicenceWorkflow.Shared.Domain;
@@ -20,6 +21,7 @@ public sealed class ApplicationsController : ControllerBase
     private readonly IValidator<ManualReviewActionRequest> _manualReviewValidator;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ApplicationsController> _logger;
+    private readonly ApplicationWorkflowMetrics _metrics;
 
     public ApplicationsController(
         DrivingLicenceDbContext dbContext,
@@ -27,7 +29,8 @@ public sealed class ApplicationsController : ControllerBase
         IValidator<SubmitApplicationRequest> submitValidator,
         IValidator<ManualReviewActionRequest> manualReviewValidator,
         TimeProvider timeProvider,
-        ILogger<ApplicationsController> logger)
+        ILogger<ApplicationsController> logger,
+        ApplicationWorkflowMetrics metrics)
     {
         _dbContext = dbContext;
         _publishEndpoint = publishEndpoint;
@@ -35,6 +38,7 @@ public sealed class ApplicationsController : ControllerBase
         _manualReviewValidator = manualReviewValidator;
         _timeProvider = timeProvider;
         _logger = logger;
+        _metrics = metrics;
     }
 
     /// <summary>Submits an application for asynchronous workflow processing.</summary>
@@ -88,6 +92,7 @@ public sealed class ApplicationsController : ControllerBase
         _dbContext.Applications.Add(application);
         await _publishEndpoint.Publish(new ApplicationSubmitted(application.Id), cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _metrics.RecordApplicationSubmitted();
 
         _logger.LogInformation(
             "Published workflow event {Event} for application {ApplicationId}",

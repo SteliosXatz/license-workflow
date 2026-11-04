@@ -21,6 +21,7 @@ builder.Services.AddSerilog((_, loggerConfiguration) =>
 });
 
 builder.Services.AddWorkerServices(builder.Configuration);
+builder.Services.AddWorkerObservability(builder.Configuration, builder.Environment);
 
 var host = builder.Build();
 
