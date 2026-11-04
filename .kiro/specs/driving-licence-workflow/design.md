@@ -76,7 +76,9 @@ graph TB
 
 ### Shared Library (`DrivingLicenceWorkflow.Shared`)
 
-Contains domain models, message contracts, the `DbContext` definition, business rule service interfaces and implementations, the saga state machine definition, the `IAuditService` interface, and configuration option classes. The library provides reusable rule implementations; each host registers only the services it consumes. The API uses `IDataValidationService` during request validation. The Worker uses all three services in its workflow consumers.
+Contains domain models (including the persisted `ApplicationWorkflowState` saga instance), message contracts, the `DbContext` definition, business rule service interfaces and implementations, the `IAuditService` interface, and configuration option classes. The library provides reusable rule implementations; each host registers only the services it consumes. The API uses `IDataValidationService` during request validation. The Worker uses all three services in its workflow consumers.
+
+The saga state machine is Worker orchestration and belongs in `DrivingLicenceWorkflow.Worker`, not Shared. The current implementation is temporarily in Shared; Task 15 tracks moving it and its direct test references to Worker while keeping the saga persistence model, message contracts, and shared service abstractions in Shared. This avoids making Shared responsible for host-specific orchestration while preserving the types required by both hosts and EF persistence.
 
 ### API Project (`DrivingLicenceWorkflow.Api`)
 
@@ -84,7 +86,7 @@ An ASP.NET Core Web API. Hosts controllers (`ApplicationsController`), FluentVal
 
 ### Worker Project (`DrivingLicenceWorkflow.Worker`)
 
-A hosted background service. Hosts the MassTransit saga (`AddSagaStateMachine`), the step consumers (`ValidateApplicationConsumer`, `CheckPhotoConsumer`, `RiskAssessmentConsumer`), `DrivingLicenceDbContext` registration (with the `WorkerDb` connection string) with EF Core outbox, retry and dead-letter queue configuration, and the saga EF Core persistence repository. Audit recording is performed directly in the saga's `.Then()` blocks (see the State Machine and Audit Recording sections).
+A hosted background service. Owns the MassTransit saga state machine and hosts it with `AddSagaStateMachine`, along with the step consumers (`ValidateApplicationConsumer`, `CheckPhotoConsumer`, `RiskAssessmentConsumer`), `DrivingLicenceDbContext` registration (with the `WorkerDb` connection string) with EF Core outbox, retry and dead-letter queue configuration, and the saga EF Core persistence repository. Audit recording is performed directly in the saga's `.Then()` blocks (see the State Machine and Audit Recording sections). Until Task 15 is implemented, the state machine source file remains in Shared.
 
 ### High-Level Architecture
 
@@ -368,7 +370,7 @@ public class RiskAssessmentOptions   // section "RiskAssessment"
 
 #### State Machine
 
-**`ApplicationWorkflowStateMachine`** — Inherits `MassTransitStateMachine<ApplicationWorkflowState>`. Defines the eight states, correlates each event by `ApplicationId`, and wires transitions and activities. The `Initially`/`Submitted` handler creates the saga and sends the `ValidateApplication` command. Subsequent event handlers transition state and send the next command. `.Then()` blocks contain both workflow state updates (e.g., storing `PhotoQualityScore`) and audit recording calls to `IAuditService`. The audit call is explicit at each transition. An example `.Then()` block:
+**`ApplicationWorkflowStateMachine`** — Worker-owned orchestration type (currently implemented in Shared pending Task 15). Inherits `MassTransitStateMachine<ApplicationWorkflowState>`. Defines the eight states, correlates each event by `ApplicationId`, and wires transitions and activities. The `Initially`/`Submitted` handler creates the saga and sends the `ValidateApplication` command. Subsequent event handlers transition state and send the next command. `.Then()` blocks contain both workflow state updates (e.g., storing `PhotoQualityScore`) and audit recording calls to `IAuditService`. The audit call is explicit at each transition. An example `.Then()` block:
 
 ```csharp
 When(ApplicationValidated)
@@ -451,7 +453,7 @@ app.UseSwaggerUI();   // served at /swagger
 
 #### Saga Host
 
-The Worker registers the saga state machine with `AddSagaStateMachine<ApplicationWorkflowStateMachine, ApplicationWorkflowState>()` and an EF Core saga repository backed by `DrivingLicenceDbContext`. The saga repository persists saga state to PostgreSQL.
+The Worker owns and registers the saga state machine with `AddSagaStateMachine<ApplicationWorkflowStateMachine, ApplicationWorkflowState>()` and an EF Core saga repository backed by `DrivingLicenceDbContext`. The saga repository persists the shared `ApplicationWorkflowState` instance to PostgreSQL. The implementation source relocation is tracked by Task 15.
 
 #### Step Consumers
 

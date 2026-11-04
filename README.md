@@ -6,8 +6,10 @@ A .NET 8 backend for submitting and processing driving licence applications thro
 
 - `DrivingLicenceWorkflow.Api` — ASP.NET Core Web API
 - `DrivingLicenceWorkflow.Worker` — background service host
-- `DrivingLicenceWorkflow.Shared` — shared workflow, domain, and persistence components
+- `DrivingLicenceWorkflow.Shared` — shared domain, message contracts, services, and persistence components
 - `DrivingLicenceWorkflow.Tests` — xUnit tests
+
+The saga state machine is orchestration owned by the Worker. Its source currently resides in Shared as an initial implementation choice; planned relocation inside Worker. The persisted saga state model and message contracts remain in Shared because they are shared with persistence and host boundaries.
 
 ## Run with Docker Compose
 

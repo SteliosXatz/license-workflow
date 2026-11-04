@@ -152,6 +152,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - _Requirements: 4.2, 5.3_
 
   - [x] 6.2 Implement ApplicationWorkflowStateMachine
+    - Current implementation is in Shared; moving the orchestration type into Worker is tracked by Task 15.
     - Inherits `MassTransitStateMachine<ApplicationWorkflowState>`
     - Define 8 states: Submitted, ValidatingData, CheckingPhoto, RiskAssessment, PendingManualReview, Approved, Rejected, Failed
     - Define 9 transitions with event correlation: declare every saga-bound event with `Event(() => X, e => e.CorrelateById(ctx => ctx.Message.ApplicationId))` so the message's `ApplicationId` is matched to the saga's `CorrelationId`:
@@ -456,6 +457,16 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Verify README was updated incrementally during each task (check completeness)
     - _Requirements: All_
 
+- [ ] 15. Move saga orchestration to Worker [FOLLOW-UP]
+  - [ ] 15.1 Relocate `ApplicationWorkflowStateMachine` and document the project boundary
+    - Move `ApplicationWorkflowStateMachine` from `DrivingLicenceWorkflow.Shared/Sagas` to a Worker-owned `Sagas` namespace/folder.
+    - Keep `ApplicationWorkflowState` (the persisted saga instance), message contracts, `IAuditService`, and shared domain/service types in Shared; do not move database schema or alter saga persistence identity.
+    - Update Worker registration, namespaces, design examples, saga/property tests, test harness registration, and any XML/docs references to use the Worker state machine type. Tests should depend on Worker directly for the orchestration tests.
+    - Review Shared package dependencies after moving the class. Remove orchestration-only references only if no remaining Shared EF Core or MassTransit persistence features require them; do not remove dependencies needed by `SagaStateMachineInstance`, the DbContext, or EF saga mapping.
+    - Update architecture diagrams and README to show that Worker owns the orchestration while Shared contains only reusable contracts, state/persistence models, and abstractions.
+    - Verify the solution builds, all tests pass, saga harness/property tests still exercise the moved Worker state machine, and API has no dependency on the Worker project.
+    - _Requirements: 5.1, 5.2, 9.2_
+
 > **Checkpoint (after task 5):** Ensure all core tests pass, ask the user if questions arise. Verify business rule services compile and basic unit tests pass.
 
 > **Checkpoint (after task 10):** Ensure all core tests pass, ask the user if questions arise. Verify full end-to-end flow works via docker compose up and Swagger.
@@ -473,9 +484,53 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
 - A single shared `DrivingLicenceDbContext` is used by both API and Worker with different connection strings (api_user vs worker_user) for least-privilege enforcement at the PostgreSQL role level.
 - The outbox pattern is implemented via MassTransit's `UseEntityFrameworkOutbox<TDbContext>()` — no custom dispatcher code needed.
 - In-place startup migration is used for the simplified single-instance setup; the comment block in Program.cs documents the multi-node production alternative.
+- The saga state machine is currently located in Shared for the initial implementation. Task 15 tracks its move to Worker; the saga instance and message contracts remain shared.
+
+- [ ] 16. User identity and audit trail enrichment [FOLLOW-UP]
+  - [ ] 16.1 Add user identity to all API endpoints
+    - Accept `X-User-Id` header on all API endpoints (submit, approve, reject, get status, get history)
+    - Add `AllowedUsers` list to configuration (appsettings.json / env override) for dummy authorization
+    - Middleware or filter: extract `X-User-Id`, validate against `AllowedUsers`, return 401 if missing or unknown
+    - Add `SubmittedBy` (string?) to `Application` entity — populated on submit, backward-compatible migration (nullable)
+    - Add `ReviewedBy` (string?) to `Application` entity — populated on approve/reject, backward-compatible migration (nullable)
+    - Register middleware in both API Program.cs pipelines
+    - _Requirements: 3.1, 3.2, 1.1_
+
+  - [ ] 16.2 Add user identity to audit trail
+    - Add `UserId` (string?) to `AuditTrailEntry` entity — backward-compatible migration (nullable)
+    - Update `IAuditService.RecordTransitionAsync` signature to accept optional `userId` parameter
+    - Pass `X-User-Id` value through to all audit entries: submission entry, manual review entries, saga-driven entries (saga carries `SubmittedBy` on its state)
+    - Update `GET /api/applications/{id}/history` response to include `userId` per entry
+    - Update tests for new auth middleware (401 cases) and enriched audit entries
+    - Update README with user identity and dummy auth documentation
+    - _Requirements: 4.1, 3.1, 3.2_
+
+- [ ] 17. ReviewSubmitted intermediate state and synchronous manual review [FOLLOW-UP]
+  - [ ] 17.1 Add `ReviewSubmitted` to `ApplicationStatus` enum and saga
+    - Add `ReviewSubmitted` to `ApplicationStatus` enum in Shared
+    - Add `ReviewSubmitted` state to `ApplicationWorkflowStateMachine`
+    - Add transitions: `PendingManualReview → ReviewSubmitted` (triggered by new `ReviewDecisionSubmitted` event from API), `ReviewSubmitted → Approved` (on `ManualReviewApproved`), `ReviewSubmitted → Rejected` (on `ManualReviewRejected`)
+    - Remove old direct `PendingManualReview → Approved/Rejected` transitions
+    - Add `ReviewDecisionSubmitted` message contract to Shared
+    - Backward-compatible migration: `ReviewSubmitted` is a new enum value, existing rows unaffected
+    - _Requirements: 3.1, 3.2, 5.1, 5.2_
+
+  - [ ] 17.2 Update manual review endpoints to transition synchronously
+    - API approve/reject: check precondition `status == PendingManualReview` (409 if not)
+    - API writes `Application.Status = ReviewSubmitted` synchronously
+    - API writes audit entry: `PendingManualReview → ReviewSubmitted`, event=`ReviewDecisionSubmitted`, details include decision (approve/reject) and reason
+    - `SaveChangesAsync` anchors the outbox transaction — publishes `ManualReviewApproved` or `ManualReviewRejected` via outbox in same transaction
+    - API returns 200 immediately; saga completes the terminal transition asynchronously
+    - Update `GET /api/applications/{id}` to surface `ReviewSubmitted` as a valid status
+    - Update tests: precondition check, synchronous audit entry, outbox publish, saga terminal transition
+    - Update README with revised manual review flow and `ReviewSubmitted` state
+    - _Requirements: 3.1, 3.2, 3.3, 4.2, 10.2_
 
 ## Follow-ups (revisit later)
 
+- [ ] Move saga orchestration to Worker - Task 15
+- [ ] User identity, dummy auth, and audit trail enrichment - Task 16
+- [ ] ReviewSubmitted intermediate state and synchronous manual review - Task 17
 - [ ] Optional: validate at startup that `PhotoCheck:MinPhotoQualityScore` < `RiskAssessment:PhotoQualityThreshold`, otherwise the risk rule for photo score can never trigger.
 
 ## Task Dependency Graph
@@ -495,7 +550,8 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     { "id": 9, "tasks": ["11.3", "12.1"] },
     { "id": 10, "tasks": ["12.2"] },
     { "id": 11, "tasks": ["12.3"] },
-    { "id": 12, "tasks": ["14.1"] }
+    { "id": 12, "tasks": ["14.1"] },
+    { "id": 13, "tasks": ["15.1"] }
   ]
 }
 ```
