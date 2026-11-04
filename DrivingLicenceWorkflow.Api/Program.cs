@@ -1,5 +1,4 @@
 using DrivingLicenceWorkflow.Api.Extensions;
-using DrivingLicenceWorkflow.Api.Logging;
 using DrivingLicenceWorkflow.Shared.Data;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -14,6 +13,7 @@ builder.Services.AddSerilog((_, loggerConfiguration) =>
     loggerConfiguration
         .MinimumLevel.Information()
         .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+        .MinimumLevel.Override("Microsoft.AspNetCore.HttpLogging", LogEventLevel.Information)
         .Enrich.FromLogContext()
         .WriteTo.File(
             new JsonFormatter(),
@@ -34,7 +34,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseSerilogRequestLogging();
-app.UseMiddleware<RequestResponseLoggingMiddleware>();
+app.UseHttpLogging();
 app.UseSwagger();
 app.UseSwaggerUI();
 

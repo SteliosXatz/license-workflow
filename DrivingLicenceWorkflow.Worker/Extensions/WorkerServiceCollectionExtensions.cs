@@ -5,6 +5,7 @@ using DrivingLicenceWorkflow.Shared.Messages;
 using DrivingLicenceWorkflow.Shared.Sagas;
 using DrivingLicenceWorkflow.Shared.Services;
 using DrivingLicenceWorkflow.Worker.Consumers;
+using DrivingLicenceWorkflow.Worker.Logging;
 using DrivingLicenceWorkflow.Worker.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,9 @@ public static class WorkerServiceCollectionExtensions
             options.UseNpgsql(workerDbConnectionString));
         services.AddBusinessRuleServices(configuration);
         services.AddScoped<IAuditService, AuditService>();
+        services.AddConsumeObserver<WorkflowMessageObserver>();
+        services.AddPublishObserver<WorkflowMessageObserver>();
+        services.AddSendObserver<WorkflowMessageObserver>();
         services.AddWorkflowMessaging(configuration);
         services.AddHostedService<Worker>();
 

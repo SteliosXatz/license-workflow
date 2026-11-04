@@ -32,6 +32,15 @@ Override the path with the `Logging__FilePath` environment variable (for example
 
 Swagger UI is available at <http://localhost:8080/swagger> in all environments. Controller XML comments are included in the generated OpenAPI document.
 
+### Request/response logging
+
+The API uses ASP.NET Core's built-in HTTP logging (`AddPiiMaskedHttpLogging()` and `app.UseHttpLogging()`), so the request and response are written as a single structured log entry: method, path, query string, status code, duration, an allow-listed set of headers (`Content-Type`, `Content-Length`, `Accept`; all others show as `[Redacted]`) and the JSON bodies. Only `application/json` and `application/problem+json` bodies are captured, up to 1 MB each. Swagger paths are not logged. The `Microsoft.AspNetCore.HttpLogging` category is set to `Information` in the Serilog configuration, because the rest of `Microsoft.AspNetCore` is limited to `Warning`.
+
+`PiiMaskingHttpLoggingInterceptor` masks the captured values before they are written, using `PiiMasker` (`DrivingLicenceWorkflow.Api/Logging`): the values of `firstName`, `lastName`, `dateOfBirth`, `nationalId`, `email`, `phoneNumber`, `address` and `photoBase64` become `***`, matched by name, case-insensitively, at any depth in the JSON. Query-string values with those names are masked too. A body that is not valid JSON (including one cut off at the size limit) is replaced with `[unparseable body omitted]` rather than logged unmasked. To mask another field, add its name to `PiiMasker`; free-text fields such as the rejection `reason` are not masked, so do not put personal data in them.
+
+### Worker message logging
+
+`WorkflowMessageObserver` (`DrivingLicenceWorkflow.Worker/Logging`) is registered as a MassTransit consume, publish and send observer. It writes one structured entry for each message consumed, published or sent, with the message type, `MessageId`, `ApplicationId` and, for sends, the destination; consumed messages also log how long the receive took. Faults are logged at `Error` with the exception. Message bodies are never logged. The workflow messages carry only the application ID and short reasons, and applicant data stays in PostgreSQL, so there is no PII to mask on the bus. RabbitMQ itself does not log message payloads in the application logs.
 ## Data model
 
 A single `DrivingLicenceDbContext` (in `DrivingLicenceWorkflow.Shared/Data`) maps every table. The API registers it with the `AppDb` connection string (`api_user`) and the Worker registers the same class with `WorkerDb` (`worker_user`); least privilege is enforced by the PostgreSQL role grants in `docker/postgres/init/01-roles.sql`, not by separate contexts. The Worker can read application data required by its consumers and update only workflow-owned columns (`Status`, `UpdatedAt`, and `PhotoQualityScore`). Table names must stay in sync with those grants.

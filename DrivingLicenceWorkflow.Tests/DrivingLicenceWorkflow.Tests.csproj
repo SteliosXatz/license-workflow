@@ -14,6 +14,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.1" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="System.Text.Json" Version="9.0.1" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
@@ -25,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DrivingLicenceWorkflow.Shared\DrivingLicenceWorkflow.Shared.csproj" />
     <ProjectReference Include="..\DrivingLicenceWorkflow.Api\DrivingLicenceWorkflow.Api.csproj" />
+    <ProjectReference Include="..\DrivingLicenceWorkflow.Worker\DrivingLicenceWorkflow.Worker.csproj" />
   </ItemGroup>
 
 </Project>
