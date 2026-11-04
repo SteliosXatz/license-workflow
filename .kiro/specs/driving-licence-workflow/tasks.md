@@ -111,35 +111,39 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document the 12 message types, their kind (event vs command), publisher, and consumer
     - _Requirements: 9.1, 9.4_
 
-- [ ] 5. Business rule services [CORE]
-  - [ ] 5.1 Implement IDataValidationService + DataValidationService
+- [x] 5. Business rule services [CORE]
+  - [x] 5.1 Implement IDataValidationService + DataValidationService
     - Interface and `ApplicationData` / `ValidationResult` records in Shared
+    - `DataValidationOptions` configuration class (section `DataValidation`): MinApplicantAge (int)    - Reads `MinApplicantAge` from `IOptions<DataValidationOptions>`
     - Validates: all required fields non-empty (firstName, lastName, dateOfBirth, nationalId, email, phoneNumber, address, licenceCategory, photoBase64), email format valid, nationalId present, applicant age >= 18 (boundary: exactly 18 passes)
     - Returns `ValidationResult` with `IsValid` bool and list of error strings
     - _Requirements: 6.2, 6.3, 1.4, 1.5, 1.6, 1.7_
 
-  - [ ] 5.2 Implement IPhotoCheckService + PhotoCheckService
+  - [x] 5.2 Implement IPhotoCheckService + PhotoCheckService
     - Interface and `PhotoCheckResult` record in Shared
-    - Validates: photo present, supported file type (decode base64 header for JPEG/PNG), file size >= minimum (from RiskAssessmentOptions.MinPhotoFileSizeBytes)
+    - `PhotoCheckOptions` configuration class (section `PhotoCheck`): MinPhotoFileSizeBytes (int), MinPhotoQualityScore (int)
+    - Validates: photo present, supported file type (decode base64 header for JPEG/PNG), file size >= PhotoCheckOptions.MinPhotoFileSizeBytes, quality score >= PhotoCheckOptions.MinPhotoQualityScore (a lower bar than the risk rule's PhotoQualityThreshold)
     - Produces deterministic quality score derived from photo content hash (e.g., `SHA256(photoBytes).FirstByte % 100` or similar) so test outcomes are reproducible
     - Returns `PhotoCheckResult` with `IsAcceptable`, `QualityScore`, `FailureReason`
     - _Requirements: 7.1, 7.3, 7.4_
 
-  - [ ] 5.3 Implement IRiskAssessmentService + RiskAssessmentService + RiskAssessmentOptions
-    - `RiskAssessmentOptions` configuration class: Watchlist (List\<string\>), PhotoQualityThreshold (int), MinPhotoFileSizeBytes (int), MinApplicantAge (int), RiskAgeThreshold (int)
+  - [x] 5.3 Implement IRiskAssessmentService + RiskAssessmentService + RiskAssessmentOptions
+    - `RiskAssessmentOptions` configuration class (section `RiskAssessment`): WatchlistPath (string, default `watchlist.txt`), PhotoQualityThreshold (int), RiskAgeThreshold (int)
+    - `IWatchlistProvider` (`bool Contains(string? nationalId)`) + `FileWatchlistProvider` in Shared: reads the file at `WatchlistPath` once (one national ID per line, blank lines and `#` comments ignored, case-insensitive, relative paths resolved against the app directory); throws if the file is missing. The default file `watchlist.txt` lives in the Worker project and is copied to its output; the Worker resolves the provider at startup so a missing file fails fast
     - Interface and `RiskAssessmentInput` / `RiskAssessmentResult` records in Shared
-    - Evaluates: applicant below RiskAgeThreshold (21), licence category not "B", nationalId in Watchlist, photo quality score below PhotoQualityThreshold
+    - Evaluates: applicant below RiskAgeThreshold (21), licence category not "B", `IWatchlistProvider.Contains(nationalId)`, photo quality score below PhotoQualityThreshold
     - Returns `RiskAssessmentResult` with `RequiresManualReview` bool and `Reason` string (triggering condition)
-    - Reads Watchlist and thresholds from `IOptions<RiskAssessmentOptions>` (application configuration)
+    - Reads thresholds from `IOptions<RiskAssessmentOptions>` and the watchlist from `IWatchlistProvider` (application configuration)
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-  - [ ] 5.4 Register all business rule services in DI
-    - Register `IDataValidationService`, `IPhotoCheckService`, `IRiskAssessmentService` with their implementations in both API and Worker DI containers
-    - Bind `RiskAssessmentOptions` from configuration (`builder.Services.Configure<RiskAssessmentOptions>(builder.Configuration.GetSection("RiskAssessment"))`)
+  - [x] 5.4 Register business rule services per host
+    - Register only the services each host uses: the API registers `IDataValidationService` for submission validation; the Worker registers `IDataValidationService`, `IPhotoCheckService`, and `IRiskAssessmentService` for its step consumers.
+    - Bind options per host: both hosts bind `DataValidationOptions` from `DataValidation`; the Worker additionally binds `PhotoCheckOptions` from `PhotoCheck` and `RiskAssessmentOptions` from `RiskAssessment`. Use shared registration helpers that allow hosts to opt into only the services they need; do not make either host register unrelated services or require unrelated configuration sections.
+    - Keep `DataValidation` values consistent between hosts (for example, override both with the same `DataValidation__MinApplicantAge` environment variable) so API pre-validation and worker validation apply the same rule.
     - _Requirements: 8.4_
 
-  - [ ] 5.5 Update README with business rules documentation
-    - Document each service's validation rules, configurable thresholds, and how to override via appsettings.json
+  - [x] 5.5 Update README with business rules documentation
+    - Document each service's validation rules, which host uses it, each host's relevant appsettings.json sections, and how to override them via environment variables
     - _Requirements: 6.2, 7.4, 8.4_
 
 - [ ] 6. Saga state machine [CORE]
@@ -321,10 +325,12 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Configure FsCheck to run minimum 100 iterations per property test
     - _Requirements: 12.1, 12.2_
 
-  - [ ]* 13.2 Write unit tests for business rule services
+  - [x]* 13.2 Write unit tests for business rule services
     - DataValidationService: applicant exactly 18 (passes), one day under 18 (fails), missing each field, invalid email
     - PhotoCheckService: supported/unsupported file type headers, file size exactly at minimum, quality score reproducibility
     - RiskAssessmentService: each risk condition independently triggers manual review, no conditions → auto approve, configurable thresholds
+    - Also covered (in `DrivingLicenceWorkflow.Tests/BusinessRules`): `FileWatchlistProvider` (comments, blanks, case, CRLF, missing file, relative path) and the per-host DI registration (`AddDataValidationService` for the API, `AddBusinessRuleServices` for the Worker)
+    - Not yet covered, see the edge-case proposals in the review of 13.2: email trimming, DOB `DateTime.Kind`, photo upper size limit, config consistency check
     - _Requirements: 12.2_
 
   - [ ]* 13.3 Write unit tests for API controllers
@@ -467,6 +473,10 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
 - A single shared `DrivingLicenceDbContext` is used by both API and Worker with different connection strings (api_user vs worker_user) for least-privilege enforcement at the PostgreSQL role level.
 - The outbox pattern is implemented via MassTransit's `UseEntityFrameworkOutbox<TDbContext>()` — no custom dispatcher code needed.
 - In-place startup migration is used for the simplified single-instance setup; the comment block in Program.cs documents the multi-node production alternative.
+
+## Follow-ups (revisit later)
+
+- [ ] Optional: validate at startup that `PhotoCheck:MinPhotoQualityScore` < `RiskAssessment:PhotoQualityThreshold`, otherwise the risk rule for photo score can never trigger.
 
 ## Task Dependency Graph
 

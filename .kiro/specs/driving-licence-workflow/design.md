@@ -76,7 +76,7 @@ graph TB
 
 ### Shared Library (`DrivingLicenceWorkflow.Shared`)
 
-Contains domain models, message contracts, the `DbContext` definition, business rule service interfaces and implementations, the saga state machine definition, the `IAuditService` interface, and configuration option classes.
+Contains domain models, message contracts, the `DbContext` definition, business rule service interfaces and implementations, the saga state machine definition, the `IAuditService` interface, and configuration option classes. The library provides reusable rule implementations; each host registers only the services it consumes. The API uses `IDataValidationService` during request validation. The Worker uses all three services in its workflow consumers.
 
 ### API Project (`DrivingLicenceWorkflow.Api`)
 
@@ -290,7 +290,7 @@ The saga orchestrates via commands (sent) and events (published). All messages l
 
 #### Business Rule Services
 
-Each business rule is a pure-function service with an interface in the Shared library and an implementation usable by both the step consumers (worker) and the API validator.
+Each business rule is a pure-function service with an interface and implementation in the Shared library. The API and Worker have separate DI containers: the API registers `IDataValidationService` for request validation, while the Worker registers `IDataValidationService`, `IPhotoCheckService`, and `IRiskAssessmentService` for its step consumers. A host should not register a rule service it does not use.
 
 **`IDataValidationService`**
 ```csharp
@@ -318,7 +318,7 @@ public interface IPhotoCheckService
 public record PhotoCheckResult(
     bool IsAcceptable, int QualityScore, string? FailureReason);
 ```
-Validates the photo is present, has a supported file type (decoded from base64 header), file size is above a minimum, and produces a deterministic quality score derived from the photo content (hash-based) so test outcomes are reproducible.
+Validates the photo is present, has a supported file type (decoded from base64 header), file size is above a minimum (`MinPhotoFileSizeBytes`), and produces a deterministic quality score derived from the photo content (hash-based) so test outcomes are reproducible. A score below `MinPhotoQualityScore` makes the photo unacceptable (hard failure). This is deliberately a lower bar than the risk rule's `PhotoQualityThreshold`: scores in between are acceptable but route the application to manual review.
 
 **`IRiskAssessmentService`**
 ```csharp
@@ -334,16 +334,34 @@ public record RiskAssessmentInput(
 public record RiskAssessmentResult(
     bool RequiresManualReview, string? Reason);
 ```
-Evaluates configurable risk rules: applicant below 21, licence category not B, national ID in watchlist, or photo quality score below threshold. Reads `Watchlist` and `PhotoQualityThreshold` from `RiskAssessmentOptions` (application configuration).
+Evaluates configurable risk rules: applicant below 21, licence category not B, national ID in watchlist, or photo quality score below threshold. Reads `PhotoQualityThreshold` and `RiskAgeThreshold` from `RiskAssessmentOptions` and checks the watchlist through `IWatchlistProvider`.
 
-**`RiskAssessmentOptions`** (configuration)
+**`IWatchlistProvider`**
 ```csharp
-public class RiskAssessmentOptions
+public interface IWatchlistProvider
 {
-    public List<string> Watchlist { get; set; } = new();
-    public int PhotoQualityThreshold { get; set; } = 50;
-    public int MinPhotoFileSizeBytes { get; set; } = 1024;
+    bool Contains(string? nationalId);
+}
+```
+`FileWatchlistProvider` loads the file at `RiskAssessmentOptions.WatchlistPath` once at construction (one national ID per line, blank lines and `#` comments ignored, case-insensitive) into a `HashSet`. The watchlist is reference data rather than tuning, so it is kept out of options; the interface lets a database- or API-backed implementation replace the file in production. A missing file throws, and the Worker resolves the provider at startup so it fails fast instead of silently approving everyone.
+
+**`DataValidationOptions`**, **`PhotoCheckOptions`** and **`RiskAssessmentOptions`** (configuration, one per service)
+```csharp
+public class DataValidationOptions   // section "DataValidation"
+{
     public int MinApplicantAge { get; set; } = 18;
+}
+
+public class PhotoCheckOptions       // section "PhotoCheck"
+{
+    public int MinPhotoFileSizeBytes { get; set; } = 1024;
+    public int MinPhotoQualityScore { get; set; } = 20;
+}
+
+public class RiskAssessmentOptions   // section "RiskAssessment"
+{
+    public string WatchlistPath { get; set; } = "watchlist.txt";
+    public int PhotoQualityThreshold { get; set; } = 50;
     public int RiskAgeThreshold { get; set; } = 21;
 }
 ```
@@ -527,15 +545,24 @@ MassTransit's EF Core outbox creates and manages its own tables (`OutboxMessage`
 
 ### Configuration
 
-`appsettings.json` holds the risk assessment configuration. Connection strings reference secrets via environment variable placeholders rather than hardcoding passwords. Docker Compose injects environment variables (loaded from a `.env` file) into the containers, and the .NET apps read those environment variables through the configuration system.
+The API and Worker are separate processes and each has its own `appsettings.json`; neither depends on the other host's configuration file. Each file contains only the sections used by that host. Both hosts need the `DataValidation` section because both run `IDataValidationService`; the Worker additionally needs `PhotoCheck` and `RiskAssessment`. Keep the shared `DataValidation` values aligned, using the same environment-variable override for both containers where necessary. Connection strings and broker credentials are supplied through environment variables rather than hardcoded secrets. Docker Compose injects variables (loaded from a `.env` file), and the .NET configuration system applies them to the appropriate host.
+
+The JSON below is the combined settings inventory for reference, not a single file to copy to both projects. Split it by host:
+- **API `appsettings.json`**: `DataValidation` and `ConnectionStrings:AppDb`.
+- **Worker `appsettings.json`**: `DataValidation`, `PhotoCheck`, `RiskAssessment`, and `ConnectionStrings:WorkerDb`.
 
 ```json
 {
-  "RiskAssessment": {
-    "Watchlist": ["AB123456", "XY789012"],
-    "PhotoQualityThreshold": 50,
+  "DataValidation": {
+    "MinApplicantAge": 18
+  },
+  "PhotoCheck": {
     "MinPhotoFileSizeBytes": 1024,
-    "MinApplicantAge": 18,
+    "MinPhotoQualityScore": 20
+  },
+  "RiskAssessment": {
+    "WatchlistPath": "watchlist.txt",
+    "PhotoQualityThreshold": 50,
     "RiskAgeThreshold": 21
   },
   "ConnectionStrings": {
@@ -545,7 +572,7 @@ MassTransit's EF Core outbox creates and manages its own tables (`OutboxMessage`
 }
 ```
 
-The API registers `DrivingLicenceDbContext` with the `AppDb` connection string; the Worker registers the same `DrivingLicenceDbContext` class with the `WorkerDb` connection string.
+The API registers `DrivingLicenceDbContext` with the `AppDb` connection string; the Worker registers the same `DrivingLicenceDbContext` class with the `WorkerDb` connection string. Environment overrides for the shared validation threshold use `DataValidation__MinApplicantAge` in both hosts. This shares the value without requiring identical appsettings files or exposing worker-only settings to the API.
 
 ### Secrets Management via `.env` (Design Decision)
 
@@ -655,7 +682,7 @@ The business rule services (data validation, photo check, risk assessment) are p
 
 ### Property 4: Photo check acceptance conditions
 
-*For any* base64-encoded photo, the photo check accepts it if and only if the photo is present, the decoded file type is supported, the file size is at or above the minimum, and the quality score is at or above the threshold. Each failure mode (no photo, unsupported type, size too small, score below threshold) independently causes rejection with a descriptive failure reason.
+*For any* base64-encoded photo, the photo check accepts it if and only if the photo is present, the decoded file type is supported, the file size is at or above the minimum, and the quality score is at or above `MinPhotoQualityScore`. Each failure mode (no photo, unsupported type, size too small, score too low) independently causes rejection with a descriptive failure reason.
 
 **Validates: Requirements 7.1, 7.3**
 

@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="watchlist.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DrivingLicenceWorkflow.Shared\DrivingLicenceWorkflow.Shared.csproj" />
   </ItemGroup>
 </Project>

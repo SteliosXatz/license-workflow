@@ -7,6 +7,7 @@ A .NET 8 backend for submitting and processing driving licence applications thro
 - `DrivingLicenceWorkflow.Api` — ASP.NET Core Web API
 - `DrivingLicenceWorkflow.Worker` — background service host
 - `DrivingLicenceWorkflow.Shared` — shared workflow, domain, and persistence components
+- `DrivingLicenceWorkflow.Tests` — xUnit tests
 
 ## Run with Docker Compose
 
@@ -49,6 +50,67 @@ Trade-offs:
 
 - In-place migration is simple and acceptable for a single instance. With several instances starting at once, they would race on concurrent DDL and could conflict or contend for locks. Production should run migrations from a dedicated job or init container before the app starts, and no instance should migrate at runtime.
 - Migrations must stay backward compatible with the previous release: add columns as nullable (or with a safe default) first, and never drop, rename, or narrow columns in the same deployment as the code change.
+
+## Business rules
+
+Three pure services live in `DrivingLicenceWorkflow.Shared/Services`; the shared library lets each host register only what it uses. The API registers `IDataValidationService` for submission validation, while the Worker registers all three services for its workflow consumers. Dates are evaluated against UTC "now" from an injected `TimeProvider`.
+
+| Service | Rules |
+|---------|-------|
+| `IDataValidationService` | `firstName`, `lastName`, `nationalId`, `phoneNumber`, `address`, `licenceCategory`, `photoBase64` and `email` must be non-empty; `email` must be a plain address (no display name); `dateOfBirth` must be set and the applicant at least `MinApplicantAge` (exactly 18 passes). Errors are prefixed with the field name. |
+| `IPhotoCheckService` | Photo must be present, valid base64 (a `data:` URI prefix is accepted), a JPEG or PNG (checked by file signature), at least `MinPhotoFileSizeBytes`, and a quality score of at least `MinPhotoQualityScore` (below it the photo is unacceptable and the workflow fails). The score is `SHA256(photoBytes)[0] % 100`, so the same photo always scores the same. |
+| `IRiskAssessmentService` | Manual review is required if the applicant is under `RiskAgeThreshold`, the licence category is not `B`, the national ID is in the watchlist, or the photo quality score is below `PhotoQualityThreshold`. National ID and category comparisons ignore case. The reason lists every rule that triggered. |
+
+### Watchlist
+
+The watchlist is reference data, so it lives in a file rather than in options. `IWatchlistProvider.Contains(nationalId)` is implemented by `FileWatchlistProvider`, which reads the file named by `RiskAssessment:WatchlistPath` once, at construction. The file has one national ID per line; blank lines and lines starting with `#` are ignored, and matching is case-insensitive. The default is `DrivingLicenceWorkflow.Worker/watchlist.txt`, which is copied next to the Worker binaries.
+
+A relative path is resolved against the application directory; an absolute path is used as is. If the file is missing, the Worker fails at startup, because an empty list would silently send nobody to manual review. An empty file is valid. To use your own list in Docker, mount it and point the setting at it, for example `RiskAssessment__WatchlistPath=/data/watchlist.txt` with a volume on the `worker` service. Swapping in a database or API-backed provider only needs a new `IWatchlistProvider` implementation.
+
+The two score settings are deliberately different: a score below `MinPhotoQualityScore` (default 20) fails the photo check, while a score from there up to `PhotoQualityThreshold` (default 50) passes the photo check but sends the application to manual review. Keep `MinPhotoQualityScore` below `PhotoQualityThreshold`, or the risk rule can never trigger.
+
+### Configuration
+
+Each service has its own options class and configuration section. The API and Worker have separate `appsettings.json` files: both need `DataValidation` because both validate the application, while `PhotoCheck` and `RiskAssessment` (including `WatchlistPath`) are Worker-only.
+
+API `appsettings.json`:
+
+```json
+{
+  "DataValidation": {
+    "MinApplicantAge": 18
+  }
+}
+```
+
+Worker `appsettings.json`:
+
+```json
+{
+  "DataValidation": {
+    "MinApplicantAge": 18
+  },
+  "PhotoCheck": {
+    "MinPhotoFileSizeBytes": 1024,
+    "MinPhotoQualityScore": 20
+  },
+  "RiskAssessment": {
+    "WatchlistPath": "watchlist.txt",
+    "PhotoQualityThreshold": 50,
+    "RiskAgeThreshold": 21
+  }
+}
+```
+
+Keep `DataValidation` values consistent between hosts so the API and Worker apply the same age rule. If overriding it, set `DataValidation__MinApplicantAge` on both the `api` and `worker` services in `docker-compose.yml`. Worker-only overrides such as `RiskAssessment__PhotoQualityThreshold=70`, `PhotoCheck__MinPhotoQualityScore=30` and `RiskAssessment__WatchlistPath=/data/watchlist.txt` belong only under the `worker` service.
+
+## Tests
+
+```powershell
+dotnet test
+```
+
+`DrivingLicenceWorkflow.Tests/BusinessRules` holds the unit tests for the business rule services: data validation, photo check, risk assessment, the file watchlist provider, and the per-host DI registration. Age rules run against a fixed clock (`FakeTimeProvider`, 2026-06-15 UTC) so boundary cases such as "turns 18 today" and leap-day birthdays do not depend on the day the tests run. Photo tests build photos of an exact size and score by varying filler bytes, so size and score boundaries are hit exactly.
 
 ## Message contracts
 

@@ -1,0 +1,4 @@
+# National IDs that require manual review, one per line.
+# Blank lines and lines starting with '#' are ignored; matching is case-insensitive.
+AB123456
+XY789012

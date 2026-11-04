@@ -1,4 +1,5 @@
 using DrivingLicenceWorkflow.Shared.Data;
+using DrivingLicenceWorkflow.Shared.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,6 +11,8 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<DrivingLicenceDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("AppDb")));
+
+builder.Services.AddDataValidationService(builder.Configuration);
 
 var app = builder.Build();
 

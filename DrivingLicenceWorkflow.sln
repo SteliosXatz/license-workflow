@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrivingLicenceWorkflow.Work
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrivingLicenceWorkflow.Shared", "DrivingLicenceWorkflow.Shared\DrivingLicenceWorkflow.Shared.csproj", "{CFA62EEC-DE34-4DBC-98F4-028EACE9051A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrivingLicenceWorkflow.Tests", "DrivingLicenceWorkflow.Tests\DrivingLicenceWorkflow.Tests.csproj", "{15B95434-88F5-428A-BBC5-3A71D7875EE7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{CFA62EEC-DE34-4DBC-98F4-028EACE9051A}.Release|x64.Build.0 = Release|Any CPU
 		{CFA62EEC-DE34-4DBC-98F4-028EACE9051A}.Release|x86.ActiveCfg = Release|Any CPU
 		{CFA62EEC-DE34-4DBC-98F4-028EACE9051A}.Release|x86.Build.0 = Release|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Debug|x64.Build.0 = Debug|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Debug|x86.Build.0 = Debug|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Release|x64.ActiveCfg = Release|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Release|x64.Build.0 = Release|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Release|x86.ActiveCfg = Release|Any CPU
+		{15B95434-88F5-428A-BBC5-3A71D7875EE7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
