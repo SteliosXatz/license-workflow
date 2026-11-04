@@ -146,12 +146,12 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document each service's validation rules, which host uses it, each host's relevant appsettings.json sections, and how to override them via environment variables
     - _Requirements: 6.2, 7.4, 8.4_
 
-- [ ] 6. Saga state machine [CORE]
-  - [ ] 6.1 Create IAuditService interface in Shared
+- [x] 6. Saga state machine [CORE]
+  - [x] 6.1 Create IAuditService interface in Shared
     - Interface with `RecordTransitionAsync(Guid applicationId, ApplicationStatus? fromStatus, ApplicationStatus toStatus, string eventName, string? details, CancellationToken)` method
     - _Requirements: 4.2, 5.3_
 
-  - [ ] 6.2 Implement ApplicationWorkflowStateMachine
+  - [x] 6.2 Implement ApplicationWorkflowStateMachine
     - Inherits `MassTransitStateMachine<ApplicationWorkflowState>`
     - Define 8 states: Submitted, ValidatingData, CheckingPhoto, RiskAssessment, PendingManualReview, Approved, Rejected, Failed
     - Define 9 transitions with event correlation: declare every saga-bound event with `Event(() => X, e => e.CorrelateById(ctx => ctx.Message.ApplicationId))` so the message's `ApplicationId` is matched to the saga's `CorrelationId`:
@@ -167,7 +167,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Inject `IAuditService` into the saga (resolved from DI container used by saga activities)
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 7.2, 7.3, 8.2, 8.3, 10.1, 10.5_
 
-  - [ ] 6.3 Update README with state machine overview
+  - [x] 6.3 Update README with state machine overview
     - Document 8 states, 9 transitions, state diagram reference, idempotency via state guards
     - Document correlation: `ApplicationId` is the key, `CorrelationId` is set equal to it when `ApplicationSubmitted` creates the saga, commands are not correlated, and unmatched events are discarded (replace the Message contracts sentence with this)
     - _Requirements: 5.1, 5.2, 10.1_

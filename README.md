@@ -112,9 +112,29 @@ dotnet test
 
 `DrivingLicenceWorkflow.Tests/BusinessRules` holds the unit tests for the business rule services: data validation, photo check, risk assessment, the file watchlist provider, and the per-host DI registration. Age rules run against a fixed clock (`FakeTimeProvider`, 2026-06-15 UTC) so boundary cases such as "turns 18 today" and leap-day birthdays do not depend on the day the tests run. Photo tests build photos of an exact size and score by varying filler bytes, so size and score boundaries are hit exactly.
 
+## Saga state machine
+
+The Worker orchestrates each application with `ApplicationWorkflowStateMachine`. It defines eight states and nine event-driven transitions:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Submitted
+    Submitted --> ValidatingData: ApplicationSubmitted / ValidateApplication
+    ValidatingData --> CheckingPhoto: ApplicationValidated / CheckPhoto
+    ValidatingData --> Failed: ApplicationValidationFailed
+    CheckingPhoto --> RiskAssessment: PhotoChecked / AssessRisk
+    CheckingPhoto --> Failed: PhotoCheckFailed
+    RiskAssessment --> Approved: RiskApproved
+    RiskAssessment --> PendingManualReview: RiskManualReviewRequired
+    PendingManualReview --> Approved: ManualReviewApproved
+    PendingManualReview --> Rejected: ManualReviewRejected
+```
+
+Handlers are state-specific, so duplicate or out-of-order events cannot rerun a transition or its command. Terminal states are finalized and cannot advance further. Each transition records its event and optional reason through `IAuditService`, which also synchronizes `Application.Status`.
+
 ## Message contracts
 
-All 12 messages are C# records in `DrivingLicenceWorkflow.Shared/Messages`. Each carries the `ApplicationId`, which equals the saga `CorrelationId`; the saga correlates every event with `CorrelateById` on that property. Events are published; commands are sent to a specific consumer queue.
+All 12 messages are C# records in `DrivingLicenceWorkflow.Shared/Messages`. `ApplicationId` is the correlation key: `CorrelationId` is set to that value when `ApplicationSubmitted` creates the saga. Commands are sent to step consumers and are not saga-correlated. Events for an unknown saga are discarded. Events are published; commands are sent to a specific consumer queue.
 
 | Message | Kind | Publisher | Consumer | Extra fields |
 |---------|------|-----------|----------|--------------|
