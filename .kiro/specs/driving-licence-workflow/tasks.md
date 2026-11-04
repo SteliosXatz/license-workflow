@@ -99,15 +99,15 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document entity schema, DbContext approach (single shared context, different connection strings per project), migration strategy and trade-offs
     - _Requirements: 5.1, 5.3_
 
-- [ ] 4. Message contracts [CORE]
-  - [ ] 4.1 Create all 12 message types in Shared
+- [x] 4. Message contracts [CORE]
+  - [x] 4.1 Create all 12 message types in Shared
     - Events (9): `ApplicationSubmitted`, `ApplicationValidated`, `ApplicationValidationFailed`, `PhotoChecked`, `PhotoCheckFailed`, `RiskApproved`, `RiskManualReviewRequired`, `ManualReviewApproved`, `ManualReviewRejected`
     - Commands (3): `ValidateApplication`, `CheckPhoto`, `AssessRisk`
     - Each message is a C# `record` with `ApplicationId` (Guid) and relevant fields (e.g., `QualityScore` on PhotoChecked, `Reason` on failure events, `RejectionReason` on ManualReviewRejected)
     - All messages implement MassTransit `CorrelatedBy<Guid>` or use `ApplicationId` property for saga correlation
     - _Requirements: 9.1, 9.4_
 
-  - [ ] 4.2 Update README with message contract overview
+  - [x] 4.2 Update README with message contract overview
     - Document the 12 message types, their kind (event vs command), publisher, and consumer
     - _Requirements: 9.1, 9.4_
 
@@ -150,7 +150,8 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
   - [ ] 6.2 Implement ApplicationWorkflowStateMachine
     - Inherits `MassTransitStateMachine<ApplicationWorkflowState>`
     - Define 8 states: Submitted, ValidatingData, CheckingPhoto, RiskAssessment, PendingManualReview, Approved, Rejected, Failed
-    - Define 9 transitions with event correlation (`CorrelateById` for each event using `ApplicationId`):
+    - Define 9 transitions with event correlation: declare every saga-bound event with `Event(() => X, e => e.CorrelateById(ctx => ctx.Message.ApplicationId))` so the message's `ApplicationId` is matched to the saga's `CorrelationId`:
+      - `ApplicationSubmitted` is the only event that creates a saga; its `Initially` handler sets `Saga.CorrelationId`/`Saga.ApplicationId` from `Message.ApplicationId`. Events for an unknown saga are discarded
       - Initially/Submitted handler: ApplicationSubmitted → transition to ValidatingData → send ValidateApplication command
       - During(ValidatingData): ApplicationValidated → transition to CheckingPhoto → send CheckPhoto; ApplicationValidationFailed → transition to Failed (store failure reason)
       - During(CheckingPhoto): PhotoChecked → store PhotoQualityScore on saga → transition to RiskAssessment → send AssessRisk; PhotoCheckFailed → transition to Failed
@@ -164,6 +165,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
 
   - [ ] 6.3 Update README with state machine overview
     - Document 8 states, 9 transitions, state diagram reference, idempotency via state guards
+    - Document correlation: `ApplicationId` is the key, `CorrelationId` is set equal to it when `ApplicationSubmitted` creates the saga, commands are not correlated, and unmatched events are discarded (replace the Message contracts sentence with this)
     - _Requirements: 5.1, 5.2, 10.1_
 
 - [ ] 7. Step consumers [CORE]

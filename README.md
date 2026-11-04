@@ -49,3 +49,22 @@ Trade-offs:
 
 - In-place migration is simple and acceptable for a single instance. With several instances starting at once, they would race on concurrent DDL and could conflict or contend for locks. Production should run migrations from a dedicated job or init container before the app starts, and no instance should migrate at runtime.
 - Migrations must stay backward compatible with the previous release: add columns as nullable (or with a safe default) first, and never drop, rename, or narrow columns in the same deployment as the code change.
+
+## Message contracts
+
+All 12 messages are C# records in `DrivingLicenceWorkflow.Shared/Messages`. Each carries the `ApplicationId`, which equals the saga `CorrelationId`; the saga correlates every event with `CorrelateById` on that property. Events are published; commands are sent to a specific consumer queue.
+
+| Message | Kind | Publisher | Consumer | Extra fields |
+|---------|------|-----------|----------|--------------|
+| `ApplicationSubmitted` | Event | API | Saga | |
+| `ValidateApplication` | Command | Saga | `ValidateApplicationConsumer` | |
+| `ApplicationValidated` | Event | `ValidateApplicationConsumer` | Saga | |
+| `ApplicationValidationFailed` | Event | `ValidateApplicationConsumer` | Saga | `Reason` |
+| `CheckPhoto` | Command | Saga | `CheckPhotoConsumer` | |
+| `PhotoChecked` | Event | `CheckPhotoConsumer` | Saga | `QualityScore` |
+| `PhotoCheckFailed` | Event | `CheckPhotoConsumer` | Saga | `Reason` |
+| `AssessRisk` | Command | Saga | `RiskAssessmentConsumer` | |
+| `RiskApproved` | Event | `RiskAssessmentConsumer` | Saga | |
+| `RiskManualReviewRequired` | Event | `RiskAssessmentConsumer` | Saga | `Reason` |
+| `ManualReviewApproved` | Event | API | Saga | |
+| `ManualReviewRejected` | Event | API | Saga | `RejectionReason` |
