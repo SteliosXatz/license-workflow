@@ -1,6 +1,6 @@
 # Driving Licence Onboarding Workflow System
 
-A .NET 8 backend for submitting and processing driving licence applications through an asynchronous onboarding workflow. The system is split into an HTTP API, a background worker, and a shared library, with PostgreSQL persistence and RabbitMQ messaging planned as the workflow infrastructure.
+A .NET 8 backend for submitting and processing driving licence applications through an asynchronous onboarding workflow. The system is split into an HTTP API, a background worker, and a shared library, with PostgreSQL persistence and RabbitMQ messaging.
 
 ## Solution structure
 
@@ -26,7 +26,9 @@ To stop the services, run `docker compose down`. The PostgreSQL data volume is p
 
 ## Data model
 
-A single `DrivingLicenceDbContext` (in `DrivingLicenceWorkflow.Shared/Data`) maps every table. The API registers it with the `AppDb` connection string (`api_user`) and the Worker will register the same class with `WorkerDb` (`worker_user`); least privilege is enforced by the PostgreSQL role grants in `docker/postgres/init/01-roles.sql`, not by separate contexts. Table names must stay in sync with those grants.
+A single `DrivingLicenceDbContext` (in `DrivingLicenceWorkflow.Shared/Data`) maps every table. The API registers it with the `AppDb` connection string (`api_user`) and the Worker registers the same class with `WorkerDb` (`worker_user`); least privilege is enforced by the PostgreSQL role grants in `docker/postgres/init/01-roles.sql`, not by separate contexts. The Worker can read application data required by its consumers and update only workflow-owned columns (`Status`, `UpdatedAt`, and `PhotoQualityScore`). Table names must stay in sync with those grants.
+
+The PostgreSQL init script runs only when the data volume is first created. If using a volume initialized before the Worker grants were expanded, apply the corresponding `GRANT SELECT ON "Applications" TO worker_user` and `GRANT UPDATE ("Status", "UpdatedAt", "PhotoQualityScore") ON "Applications" TO worker_user` as the database owner.
 
 | Table | Entity | Notes |
 |-------|--------|-------|
@@ -140,13 +142,21 @@ The Worker `AuditService` appends one `AuditTrailEntry` for each saga transition
 
 ## Step consumers
 
-The Worker registers three MassTransit consumers. Each loads its application from `DrivingLicenceDbContext` using the command's `ApplicationId`, runs the corresponding shared business-rule service, and publishes a result event. Missing applications and unexpected service/contract failures throw so MassTransit can retry or route the message to its error queue rather than silently advancing.
+The Worker registers three MassTransit consumers. Each loads its application from `DrivingLicenceDbContext` using the command's `ApplicationId`, runs the corresponding shared business-rule service, and publishes a result event. Missing applications and unexpected service/contract failures throw `WorkflowValidationException` (a permanent error, not retried) so MassTransit routes the message to its error queue rather than silently advancing.
 
 | Consumer | Command | Responsibility | Published event |
 |----------|---------|----------------|-----------------|
 | `ValidateApplicationConsumer` | `ValidateApplication` | Validates required application data, email, and minimum age with `IDataValidationService`. | `ApplicationValidated` or `ApplicationValidationFailed` with the validation reasons. |
 | `CheckPhotoConsumer` | `CheckPhoto` | Checks photo data and quality with `IPhotoCheckService`; persists the accepted quality score on the application for risk assessment. | `PhotoChecked` with the score or `PhotoCheckFailed` with the failure reason. |
 | `RiskAssessmentConsumer` | `AssessRisk` | Loads the stored photo score and evaluates the application with `IRiskAssessmentService`. | `RiskApproved` or `RiskManualReviewRequired` with the reason. |
+
+## Messaging and persistence
+
+The API and Worker connect to RabbitMQ using `RabbitMQ__Host`, `RabbitMQ__Username`, and `RabbitMQ__Password` environment variables. Docker Compose points both applications at the `queue` service. The API is a publisher only. It uses MassTransit's EF Core bus outbox so application writes and published submission/manual-review events commit atomically.
+
+The Worker persists saga instances with MassTransit's EF Core repository in PostgreSQL using `ConnectionStrings__WorkerDb`. The saga endpoint and each step-consumer endpoint use the EF Core consume outbox so state/audit changes and outgoing workflow messages are committed together before broker delivery. Commands are sent to the dedicated `validate-application`, `check-photo`, and `assess-risk` queues; saga events are handled by `workflow-saga`.
+
+All Worker endpoints apply exponential retry (five retries, 1-second minimum and 30-second maximum delay) to every exception except `WorkflowValidationException`, which marks permanent missing-data and message-contract failures and is not retried. MassTransit routes exhausted or non-retryable failures to the endpoint's error queue (for example, `workflow-saga_error`). RabbitMQ retains queued messages while the Worker is unavailable.
 
 ## Message contracts
 

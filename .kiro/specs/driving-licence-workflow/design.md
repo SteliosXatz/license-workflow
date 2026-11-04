@@ -473,15 +473,18 @@ The cleaner alternative — a MassTransit pipeline observer (or filter) register
 
 #### Retry and Dead-Letter Configuration
 
-MassTransit consumer-level configuration applies retry with exponential backoff and routes messages to the error queue (dead-letter) after retries are exhausted. This wraps the `Consume()` method for both the saga and the step consumers. These are reliability NFRs implemented as one-line configuration.
+The saga and step-consumer endpoints apply exponential retry (five retries, 1-second minimum and 30-second maximum delay). `WorkflowValidationException` (missing application data or an invalid step result, thrown by the consumers and audit service) is permanent and is ignored by retry, so it goes straight to the error queue. Every other exception is retried. MassTransit routes non-retryable or exhausted messages to each endpoint's standard RabbitMQ error queue (the queue name with `_error` appended).
 
 ```csharp
 cfg.ReceiveEndpoint("workflow-saga", e =>
 {
     e.ConfigureSaga<ApplicationWorkflowState>(context);
-    e.UseMessageRetry(r => r.Exponential(5, TimeSpan.FromSeconds(1),
-        TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5)));
-    e.ConfigureError(x => x.BindTo("workflow-saga-error"));
+    e.UseMessageRetry(r =>
+    {
+        r.Exponential(5, TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5));
+        r.Ignore<WorkflowValidationException>();
+    });
 });
 ```
 

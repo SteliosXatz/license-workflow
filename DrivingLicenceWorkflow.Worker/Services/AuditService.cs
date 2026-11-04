@@ -1,3 +1,4 @@
+using DrivingLicenceWorkflow.Shared.Exceptions;
 using DrivingLicenceWorkflow.Shared.Data;
 using DrivingLicenceWorkflow.Shared.Domain;
 using DrivingLicenceWorkflow.Shared.Services;
@@ -28,7 +29,7 @@ public sealed class AuditService : IAuditService
 
         var application = await _dbContext.Applications
             .SingleOrDefaultAsync(application => application.Id == applicationId, cancellationToken)
-            ?? throw new InvalidOperationException($"Application {applicationId} was not found.");
+            ?? throw new WorkflowValidationException($"Application {applicationId} was not found.");
 
         var timestamp = _timeProvider.GetUtcNow().UtcDateTime;
         _dbContext.AuditTrailEntries.Add(new AuditTrailEntry

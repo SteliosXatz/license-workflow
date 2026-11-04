@@ -1,19 +1,8 @@
 using DrivingLicenceWorkflow.Shared.Services;
-using DrivingLicenceWorkflow.Worker.Consumers;
-using DrivingLicenceWorkflow.Worker.Services;
-using MassTransit;
-using DrivingLicenceWorkflow.Worker;
+using DrivingLicenceWorkflow.Worker.Extensions;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddBusinessRuleServices(builder.Configuration);
-builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddMassTransit(x =>
-{
-    x.AddConsumer<ValidateApplicationConsumer>();
-    x.AddConsumer<CheckPhotoConsumer>();
-    x.AddConsumer<RiskAssessmentConsumer>();
-});
-builder.Services.AddHostedService<Worker>();
+builder.Services.AddWorkerServices(builder.Configuration);
 
 var host = builder.Build();
 

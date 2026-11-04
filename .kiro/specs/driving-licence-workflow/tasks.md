@@ -254,28 +254,31 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document all 5 endpoints with HTTP method, path, request/response shapes, status codes
     - _Requirements: 1.1, 2.1, 3.1, 4.1, 11.3_
 
-- [ ] 10. MassTransit configuration [CORE]
-  - [ ] 10.1 Configure MassTransit in API Program.cs
+- [x] 10. MassTransit configuration [CORE]
+  - [x] 10.1 Configure MassTransit in API Program.cs
     - Register MassTransit with RabbitMQ transport (read host/credentials from environment variables)
     - `UseEntityFrameworkOutbox<DrivingLicenceDbContext>()` for transactional publishing
     - Configure publish endpoints for ApplicationSubmitted, ManualReviewApproved, ManualReviewRejected
     - API is a publisher only (no consumers)
     - _Requirements: 9.1, 9.4, 10.2_
 
-  - [ ] 10.2 Configure MassTransit in Worker Program.cs
+  - [x] 10.2 Configure MassTransit in Worker Program.cs
     - Register MassTransit with RabbitMQ transport (read host/credentials from environment variables)
     - `UseEntityFrameworkOutbox<DrivingLicenceDbContext>()` for transactional command publishing from saga
     - `AddSagaStateMachine<ApplicationWorkflowStateMachine, ApplicationWorkflowState>()` with EF Core saga repository (backed by DrivingLicenceDbContext / WorkerDb)
     - Add step consumers: `ValidateApplicationConsumer`, `CheckPhotoConsumer`, `RiskAssessmentConsumer`
-    - Configure receive endpoints with retry (exponential backoff: 5 attempts, 1s min, 30s max) and error queue (DLQ):
+    - Configure receive endpoints with retry (exponential backoff: 5 retries, 1s min, 30s max), ignoring the permanent `WorkflowValidationException`; rely on MassTransit's endpoint-specific RabbitMQ error queue for non-retryable or exhausted messages:
       ```
-      e.UseMessageRetry(r => r.Exponential(5, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5)));
-      e.ConfigureError(x => x.BindTo("workflow-saga-error"));
+      e.UseMessageRetry(r =>
+      {
+          r.Exponential(5, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5));
+          r.Ignore<WorkflowValidationException>();
+      });
       ```
     - Configure saga receive endpoint and consumer receive endpoints
     - _Requirements: 9.2, 9.4, 10.1, 10.4, 10.6_
 
-  - [ ] 10.3 Update README with messaging configuration
+  - [x] 10.3 Update README with messaging configuration
     - Document RabbitMQ + MassTransit setup, outbox pattern, retry/DLQ configuration, saga persistence
     - _Requirements: 9.4, 10.1, 10.4_
 
@@ -493,7 +496,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Middleware or filter: extract `X-User-Id`, validate against `AllowedUsers`, return 401 if missing or unknown
     - Add `SubmittedBy` (string?) to `Application` entity — populated on submit, backward-compatible migration (nullable)
     - Add `ReviewedBy` (string?) to `Application` entity — populated on approve/reject, backward-compatible migration (nullable)
-    - Register middleware in both API Program.cs pipelines
+    - Register middleware in API Program.cs pipeline
     - _Requirements: 3.1, 3.2, 1.1_
 
   - [ ] 16.2 Add user identity to audit trail

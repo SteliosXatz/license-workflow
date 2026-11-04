@@ -1,3 +1,4 @@
+using DrivingLicenceWorkflow.Shared.Exceptions;
 using DrivingLicenceWorkflow.Shared.Data;
 using DrivingLicenceWorkflow.Shared.Messages;
 using DrivingLicenceWorkflow.Shared.Services;
@@ -23,7 +24,7 @@ public sealed class CheckPhotoConsumer : IConsumer<CheckPhoto>
     {
         var application = await _dbContext.Applications
             .SingleOrDefaultAsync(a => a.Id == context.Message.ApplicationId, context.CancellationToken)
-            ?? throw new InvalidOperationException(
+            ?? throw new WorkflowValidationException(
                 $"Application {context.Message.ApplicationId} was not found.");
 
         var result = _photoCheckService.Check(application.PhotoBase64);
@@ -32,7 +33,7 @@ public sealed class CheckPhotoConsumer : IConsumer<CheckPhoto>
         {
             if (string.IsNullOrWhiteSpace(result.FailureReason))
             {
-                throw new InvalidOperationException(
+                throw new WorkflowValidationException(
                     $"Photo check failed for application {application.Id} without providing a failure reason.");
             }
 

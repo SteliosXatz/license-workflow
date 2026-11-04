@@ -1,3 +1,4 @@
+using DrivingLicenceWorkflow.Shared.Exceptions;
 using DrivingLicenceWorkflow.Shared.Data;
 using DrivingLicenceWorkflow.Shared.Messages;
 using DrivingLicenceWorkflow.Shared.Services;
@@ -23,7 +24,7 @@ public sealed class ValidateApplicationConsumer : IConsumer<ValidateApplication>
     {
         var application = await _dbContext.Applications
             .SingleOrDefaultAsync(a => a.Id == context.Message.ApplicationId, context.CancellationToken)
-            ?? throw new InvalidOperationException(
+            ?? throw new WorkflowValidationException(
                 $"Application {context.Message.ApplicationId} was not found.");
 
         var result = _validationService.Validate(new ApplicationData(
@@ -47,7 +48,7 @@ public sealed class ValidateApplicationConsumer : IConsumer<ValidateApplication>
 
         if (result.Errors.Count == 0)
         {
-            throw new InvalidOperationException(
+            throw new WorkflowValidationException(
                 $"Validation failed for application {application.Id} without providing an error reason.");
         }
 

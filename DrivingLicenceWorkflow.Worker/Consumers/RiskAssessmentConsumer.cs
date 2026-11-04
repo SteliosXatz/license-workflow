@@ -1,3 +1,4 @@
+using DrivingLicenceWorkflow.Shared.Exceptions;
 using DrivingLicenceWorkflow.Shared.Data;
 using DrivingLicenceWorkflow.Shared.Messages;
 using DrivingLicenceWorkflow.Shared.Services;
@@ -23,11 +24,11 @@ public sealed class RiskAssessmentConsumer : IConsumer<AssessRisk>
     {
         var application = await _dbContext.Applications
             .SingleOrDefaultAsync(a => a.Id == context.Message.ApplicationId, context.CancellationToken)
-            ?? throw new InvalidOperationException(
+            ?? throw new WorkflowValidationException(
                 $"Application {context.Message.ApplicationId} was not found.");
 
         var photoQualityScore = application.PhotoQualityScore
-            ?? throw new InvalidOperationException(
+            ?? throw new WorkflowValidationException(
                 $"Application {application.Id} has no stored photo quality score.");
 
         var result = _riskAssessmentService.Assess(new RiskAssessmentInput(
@@ -40,7 +41,7 @@ public sealed class RiskAssessmentConsumer : IConsumer<AssessRisk>
         {
             if (string.IsNullOrWhiteSpace(result.Reason))
             {
-                throw new InvalidOperationException(
+                throw new WorkflowValidationException(
                     $"Risk assessment requires manual review for application {application.Id} without providing a reason.");
             }
 

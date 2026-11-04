@@ -26,7 +26,8 @@ BEGIN
     CASE table_name
         WHEN 'Applications' THEN
             EXECUTE format('GRANT SELECT, INSERT, UPDATE ON TABLE %s TO api_user', table_reference);
-            EXECUTE format('GRANT SELECT ("Id"), UPDATE ("Status") ON TABLE %s TO worker_user', table_reference);
+            EXECUTE format('GRANT SELECT ON TABLE %s TO worker_user', table_reference);
+            EXECUTE format('GRANT UPDATE ("Status", "UpdatedAt", "PhotoQualityScore") ON TABLE %s TO worker_user', table_reference);
         WHEN 'AuditTrailEntry' THEN
             EXECUTE format('GRANT SELECT, INSERT, UPDATE ON TABLE %s TO api_user', table_reference);
             EXECUTE format('GRANT ALL PRIVILEGES ON TABLE %s TO worker_user', table_reference);
