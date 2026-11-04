@@ -1,6 +1,103 @@
-@DrivingLicenceWorkflow.Api_HostAddress = http://localhost:5237
+#@baseUrl = http://localhost:5237
+@baseUrl = http://localhost:8080
+@unknownApplicationId = 00000000-0000-0000-0000-000000000001
+@photoBase64 = /9j/4J/E6Q4zWH2ix+wRNluApcrvFDleg6jN8hc8YYar0PUaP2SJrtP4HUJnjLHW+yBFao+02f4jSG2St9wBJktwlbrfBClOc5i94gcsUXabwOUKL1R5nsPoDTJXfKHG6xA1Wn+kye4TOF2Cp8zxFjtgharP9Bk+Y4it0vccQWaLsNX6H0RpjrPY/SJHbJG22wAlSm+Uud4DKE1yl7zhBitQdZq/5AkuU3idwucMMVZ7oMXqDzRZfqPI7RI3XIGmy/AVOl+Eqc7zGD1ih6zR9htAZYqv1PkeQ2iNstf8IUZrkLXa/yRJbpO43QInTHGWu+AFKk90mb7jCC1Sd5zB5gswVXqfxOkOM1h9osfsETZbgKXK7xQ5XoOozfIXPGGGq9D1Gj9kia7T+B1CZ4yx1vsgRWqPtNn+I0htkrfcASZLcJW63wQpTnOYveIHLFF2m8DlCi9UeZ7D6A0yV3yhxusQNVp/pMnuEzhdgqfM8RY7YIWqz/QZPmOIrdL3HEFmi7DV+h9EaY6z2P0iR2yRttsAJUpvlLneAyhNcpe84QYrUHWav+QJLlN4ncLnDDFWe6DF6g80WX6jyO0SN1yBpsvwFTpfhKnO8xg9Yoes0fYbQGWKr9T5HkNojbLX/CFGa5C12v8kSW6TuN0CJ0xxlrvgBSpPdJm+4wgtUnecweYLMFV6n8TpDjNYfaLH7BE2W4Clyu8UOV6DqM3yFzxhhqvQ9Ro/ZImu0/gdQmeMsdb7IEVqj7TZ/iNIbZK33AEmS3CVut8EKU5zmL3iByxRdpvA5QovVHmew+gNMld8ocbrEDVaf6TJ7hM4XYKnzPEWO2CFqs/0GT5jiK3S9xxBZouw1fofRGmOs9j9IkdskbbbACVKb5S53gMoTXKXvOEGK1B1mr/kCS5TeJ3C5wwxVnugxeoPNFl+o8jtEjdcgabL8BU6X4SpzvMYPWKHrNH2G0Bliq/U+R5DaI2y1/whRmuQtdr/JEluk7jdAidMcZa74AUqT3SZvuMILVJ3nMHmCzBVep/E6Q4zWH2ix+wRNluApcrvFDleg6jN8hc8YYar0PUaP2SJrtP4HUJnjLHW+yBFao+02f4jSG2St9wBJktwlbrfBClOc5i94gcsUXabwOUKL1R5nsPoDTJXfKHG6xA1Wn+kye4TOF2Cp8zxFjtgharP9Bk+Y4it0vccQWaLsNX6H0RpjrPY/SJHbJG22wAlSm+Uud4DKE1yl7zhBitQdZq/5AkuU3idwucMMVZ7oMXqDzRZfqPI7RI3XIGmy/AVOl+Eqc7zGD1ih6zR9htAZYqv1PkeQ2iNstf8IUZrkLXa/yRJbpO43QInTHGWu+AFKk90mb7jCC1Sd5zB5g==
 
-GET {{DrivingLicenceWorkflow.Api_HostAddress}}/weatherforecast/
+### Submit an application for automatic approval (category B, age 36)
+# @name submitApprovalCandidate
+POST {{baseUrl}}/api/applications
+Content-Type: application/json
+
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "dateOfBirth": "1984-01-01",
+  "nationalId": "MANUAL-TEST-APPROVAL-001",
+  "email": "jane.doe@example.com",
+  "phoneNumber": "+30 210 0000000",
+  "address": "1 Main Street",
+  "licenceCategory": "B",
+  "photoBase64": "{{photoBase64}}"
+}
+
+### Get current status for the submitted application
+GET {{baseUrl}}/api/applications/{{submitApprovalCandidate.response.body.$.applicationId}}
 Accept: application/json
 
-###
+### Get audit history for the submitted application
+GET {{baseUrl}}/api/applications/{{submitApprovalCandidate.response.body.$.applicationId}}/history
+Accept: application/json
+
+### Submit invalid application (expected 400 Bad Request)
+POST {{baseUrl}}/api/applications
+Content-Type: application/json
+
+{
+  "firstName": "",
+  "lastName": "Doe",
+  "dateOfBirth": "1990-01-01",
+  "nationalId": "MANUAL-TEST-INVALID-001",
+  "email": "not-an-email",
+  "phoneNumber": "+30 210 0000000",
+  "address": "1 Main Street",
+  "licenceCategory": "B",
+  "photoBase64": "{{photoBase64}}"
+}
+
+### Get a non-existent application (expected 404 Not Found)
+GET {{baseUrl}}/api/applications/{{unknownApplicationId}}
+Accept: application/json
+
+### Request approval before manual review (expected 409 Conflict)
+POST {{baseUrl}}/api/applications/{{submitApprovalCandidate.response.body.$.applicationId}}/approve
+
+### Request manual review with an invalid reason (expected 400 Bad Request)
+POST {{baseUrl}}/api/applications/{{submitApprovalCandidate.response.body.$.applicationId}}/reject
+Content-Type: application/json
+
+{
+  "reason": " "
+}
+
+### Submit an application that requires manual review (category A)
+# @name submitManualReviewCandidate
+POST {{baseUrl}}/api/applications
+Content-Type: application/json
+
+{
+  "firstName": "Alex",
+  "lastName": "Example",
+  "dateOfBirth": "1990-01-01",
+  "nationalId": "MANUAL-TEST-REVIEW-001",
+  "email": "alex.example@example.com",
+  "phoneNumber": "+30 210 0000001",
+  "address": "2 Main Street",
+  "licenceCategory": "A",
+  "photoBase64": "{{photoBase64}}"
+}
+
+### Check manual-review application status; wait until it is PendingManualReview
+GET {{baseUrl}}/api/applications/{{submitManualReviewCandidate.response.body.$.applicationId}}
+Accept: application/json
+
+### Request approval after the status is PendingManualReview
+POST {{baseUrl}}/api/applications/{{submitManualReviewCandidate.response.body.$.applicationId}}/approve
+
+### Request rejection instead of approval; run only while PendingManualReview
+POST {{baseUrl}}/api/applications/{{submitManualReviewCandidate.response.body.$.applicationId}}/reject
+Content-Type: application/json
+
+{
+  "reason": "Manual test: supporting documents could not be verified."
+}
+
+### Approve an unknown application (expected 404 Not Found)
+POST {{baseUrl}}/api/applications/{{unknownApplicationId}}/approve
+
+### Reject an unknown application (expected 404 Not Found)
+POST {{baseUrl}}/api/applications/{{unknownApplicationId}}/reject
+Content-Type: application/json
+
+{
+  "reason": "Manual test."
+}

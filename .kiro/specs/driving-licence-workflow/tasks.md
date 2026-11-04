@@ -320,7 +320,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - _Requirements: 11.5, 13.4_
 
 - [ ] 13. Tests [CORE]
-  - [ ] 13.1 Create test project structure and test framework setup
+  - [x] 13.1 Create test project structure and test framework setup
     - Create `DrivingLicenceWorkflow.Tests` project referencing all three source projects
     - Directories: `BusinessRules/`, `StateMachine/`, `Api/`, `Saga/`
     - Add FsCheck + xUnit + MassTransit Test Harness NuGet packages
@@ -335,7 +335,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Not yet covered, see the edge-case proposals in the review of 13.2: email trimming, DOB `DateTime.Kind`, photo upper size limit, config consistency check
     - _Requirements: 12.2_
 
-  - [ ]* 13.3 Write unit tests for API controllers
+  - [x]* 13.3 Write unit tests for API controllers
     - Submit valid application → 200 with ID and status
     - Submit with missing fields → 400
     - GET existing application → 200 with all fields
@@ -343,14 +343,14 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Mock DbContext and IPublishEndpoint
     - _Requirements: 12.3, 1.1, 1.4, 2.1, 2.2_
 
-  - [ ]* 13.4 Write unit tests for manual review endpoints
+  - [x]* 13.4 Write unit tests for manual review endpoints
     - Approve/reject on unknown ID → 404
     - Approve/reject on non-PendingManualReview → 409
     - Reject with missing reason → 400
     - Reject with reason > 1000 chars → 400
     - _Requirements: 12.3, 3.3, 3.4_
 
-  - [ ]* 13.5 Write saga tests with MassTransit test harness
+  - [x]* 13.5 Write saga tests with MassTransit test harness
     - Use `AddMassTransitTestHarness` with in-memory transport and saga repository
     - Full approval flow: ApplicationSubmitted → ValidatingData → CheckingPhoto → RiskAssessment → Approved
     - Failure flow: ApplicationSubmitted → ValidatingData → Failed (validation fails)
@@ -358,90 +358,91 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Assert state transitions, published commands, and consumed events
     - _Requirements: 12.1_
 
-  - [ ]* 13.6 Write property test: Application ID uniqueness
+  - [x]* 13.6 Write property test: Application ID uniqueness
     - **Property 1: Application ID uniqueness**
     - For any sequence of application submissions, every generated application ID is unique within that sequence
     - **Validates: Requirements 1.1, 1.3**
     - Tag: `// Feature: driving-licence-workflow, Property 1: Application ID uniqueness`
     - _Requirements: 1.1, 1.3_
 
-  - [ ]* 13.7 Write property test: Data validation completeness
+  - [x]* 13.7 Write property test: Data validation completeness
     - **Property 2: Data validation completeness**
     - For any application data, validation succeeds if and only if all required fields are non-empty, email is valid, and age >= 18. When validation fails, errors list exactly the failing fields. Boundary (age exactly 18) must pass.
     - **Validates: Requirements 1.4, 1.5, 1.6, 1.7**
     - Tag: `// Feature: driving-licence-workflow, Property 2: Data validation completeness`
     - _Requirements: 1.4, 1.5, 1.6, 1.7_
 
-  - [ ]* 13.8 Write property test: Photo quality score determinism
+  - [x]* 13.8 Write property test: Photo quality score determinism
     - **Property 3: Photo quality score determinism**
     - For any base64-encoded photo string, calling the photo check twice yields the same quality score, and the same photo content always produces the same score across separate runs.
     - **Validates: Requirements 7.4**
     - Tag: `// Feature: driving-licence-workflow, Property 3: Photo quality score determinism`
     - _Requirements: 7.4_
 
-  - [ ]* 13.9 Write property test: Photo check acceptance conditions
+  - [x]* 13.9 Write property test: Photo check acceptance conditions
     - **Property 4: Photo check acceptance conditions**
     - For any base64-encoded photo, the photo check accepts it if and only if the photo is present, file type is supported, file size is above minimum, and quality score is above threshold. Each failure mode independently causes rejection.
     - **Validates: Requirements 7.1, 7.3**
     - Tag: `// Feature: driving-licence-workflow, Property 4: Photo check acceptance conditions`
     - _Requirements: 7.1, 7.3_
 
-  - [ ]* 13.10 Write property test: Risk assessment decision
+  - [x]* 13.10 Write property test: Risk assessment decision
     - **Property 5: Risk assessment decision**
     - For any risk assessment input, manual review is required if and only if at least one condition holds: age < 21, category != B, nationalId in watchlist, or photo quality < threshold. When none hold, result is auto-approval. Reason corresponds to satisfied condition(s).
     - **Validates: Requirements 8.1, 8.2, 8.3**
     - Tag: `// Feature: driving-licence-workflow, Property 5: Risk assessment decision`
     - _Requirements: 8.1, 8.2, 8.3_
 
-  - [ ]* 13.11 Write property test: State machine transition invariant
+  - [x]* 13.11 Write property test: State machine transition invariant
     - **Property 6: State machine transition invariant**
     - For any current state and any event, the state machine accepts the transition if and only if the (state, event) pair is in the set of nine defined valid transitions. Terminal states reject all events.
     - **Validates: Requirements 5.2, 5.4, 5.5, 10.5**
     - Tag: `// Feature: driving-licence-workflow, Property 6: State machine transition invariant`
     - _Requirements: 5.2, 5.4, 5.5, 10.5_
 
-  - [ ]* 13.12 Write property test: Audit trail count invariant
+  - [x]* 13.12 Write property test: Audit trail count invariant
     - **Property 7: Audit trail count invariant**
     - For any sequence of N valid transitions applied to an application, the audit trail contains exactly N entries, each with timestamp and event name, and the application status equals the target state of the last transition.
     - **Validates: Requirements 4.2, 5.3, 9.3**
     - Tag: `// Feature: driving-licence-workflow, Property 7: Audit trail count invariant`
     - _Requirements: 4.2, 5.3, 9.3_
 
-  - [ ]* 13.13 Write property test: Audit trail ordering
+  - [x]* 13.13 Write property test: Audit trail ordering
     - **Property 8: Audit trail ordering**
     - For any sequence of transitions, the retrieved audit history is ordered chronologically by timestamp, and every entry contains timestamp, fromStatus, toStatus, event name, and optional details.
     - **Validates: Requirements 4.1**
     - Tag: `// Feature: driving-licence-workflow, Property 8: Audit trail ordering`
     - _Requirements: 4.1_
 
-  - [ ]* 13.14 Write property test: Idempotent duplicate message handling
+  - [x]* 13.14 Write property test: Idempotent duplicate message handling
     - **Property 9: Idempotent duplicate message handling**
     - For any message delivered more than once to the saga after it has progressed past the state that message targets, the duplicate delivery is a no-op: the saga does not re-transition, does not re-send commands, and the audit trail gains no additional entries.
     - **Validates: Requirements 10.1**
     - Tag: `// Feature: driving-licence-workflow, Property 9: Idempotent duplicate message handling`
     - _Requirements: 10.1_
 
-  - [ ]* 13.15 Write property test: Manual review precondition
+  - [x]* 13.15 Write property test: Manual review precondition
     - **Property 10: Manual review precondition**
     - For any application whose status is not PendingManualReview, the approve and reject endpoints return a 409 Conflict response without publishing a manual review event or recording a transition.
     - **Validates: Requirements 3.3**
     - Tag: `// Feature: driving-licence-workflow, Property 10: Manual review precondition`
     - _Requirements: 3.3_
 
-  - [ ]* 13.16 Write property test: Step failure recording
+  - [x]* 13.16 Write property test: Step failure recording
     - **Property 11: Step failure recording**
     - For any step consumer that throws an unexpected error, the failure reason is recorded in the audit trail or application record, and the saga does not silently advance to the next state.
     - **Validates: Requirements 10.6**
     - Tag: `// Feature: driving-licence-workflow, Property 11: Step failure recording`
     - _Requirements: 10.6_
 
-  - [ ]* 13.17 Write integration tests with Testcontainers
+  - [ ]* 13.17 Write integration tests with Testcontainers [DEFERRED]
     - Spin up real PostgreSQL and RabbitMQ containers using Testcontainers
     - Exercise full API + worker stack: submit application, poll status, verify audit trail
     - Verify end-to-end workflow: Submitted → Approved (happy path)
+    - Deferred by user; the design document describes Testcontainers integration tests as a stretch enhancement.
     - _Requirements: 12.4_
 
-  - [ ] 13.18 Update README with testing instructions
+  - [x] 13.18 Update README with testing instructions
     - Document how to run tests (`dotnet test`), test project structure, what each test category covers, FsCheck iteration count
     - _Requirements: 12.1, 12.2, 12.3_
 
@@ -527,11 +528,29 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Update README with revised manual review flow and `ReviewSubmitted` state
     - _Requirements: 3.1, 3.2, 3.3, 4.2, 10.2_
 
+- [ ] 18. Promote worker_user to schema owner, move migrations to Worker [FOLLOW-UP]
+  - [ ] 18.1 Grant `worker_user` full schema ownership
+    - Update PostgreSQL init script: grant `worker_user` full DDL privileges (OWNER of schema, CREATE, ALTER, DROP) on `dl_system` database
+    - `worker_user` owns the schema and all tables — no fine-grained per-table permissions needed
+    - `api_user` remains least-privilege: SELECT/INSERT/UPDATE on `Applications`, `AuditTrailEntry`, and the outbox tables only — no DDL, no access to `ApplicationWorkflowState`
+    - Update `.env.example` and Docker Compose environment variables to reflect separate role credentials
+    - _Requirements: 11.1_
+
+  - [ ] 18.2 Move EF Core migration execution to Worker startup
+    - Remove `db.Database.MigrateAsync()` from API `Program.cs`
+    - Worker `Program.cs` runs `db.Database.MigrateAsync()` on startup using the `WorkerDb` connection string (`worker_user`) — it has the DDL rights to apply schema changes
+    - API starts without running migrations; it relies on the Worker (or a dedicated init container) to have applied them first
+    - Update Docker Compose `depends_on` to ensure Worker starts (and completes migration) before API accepts traffic — or document the startup race and recommend an init container for production
+    - Update the migration strategy comment block in Worker `Program.cs` to reflect `worker_user` ownership
+    - Update README with revised migration ownership and startup ordering
+    - _Requirements: 11.1_
+
 ## Follow-ups (revisit later)
 
 - [ ] Move saga orchestration to Worker - Task 15
 - [ ] User identity, dummy auth, and audit trail enrichment - Task 16
 - [ ] ReviewSubmitted intermediate state and synchronous manual review - Task 17
+- [ ] Promote worker_user to schema owner, move migrations to Worker - Task 18
 - [ ] Optional: validate at startup that `PhotoCheck:MinPhotoQualityScore` < `RiskAssessment:PhotoQualityThreshold`, otherwise the risk rule for photo score can never trigger.
 
 ## Task Dependency Graph

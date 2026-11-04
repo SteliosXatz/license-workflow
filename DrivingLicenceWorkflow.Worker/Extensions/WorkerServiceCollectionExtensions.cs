@@ -23,11 +23,11 @@ public static class WorkerServiceCollectionExtensions
             options.UseNpgsql(workerDbConnectionString));
         services.AddBusinessRuleServices(configuration);
         services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped(typeof(WorkflowAuditActivity<>));
         services.AddConsumeObserver<WorkflowMessageObserver>();
         services.AddPublishObserver<WorkflowMessageObserver>();
         services.AddSendObserver<WorkflowMessageObserver>();
-        services.AddWorkflowMessaging(configuration);
-        services.AddHostedService<Worker>();
+        services.AddWorkflowMessaging(configuration);        
 
         return services;
     }

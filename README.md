@@ -9,6 +9,18 @@ A .NET 8 backend for submitting and processing driving licence applications thro
 - `DrivingLicenceWorkflow.Shared` — shared domain, message contracts, services, and persistence components
 - `DrivingLicenceWorkflow.Tests` — xUnit tests
 
+## Tests
+
+Run the test suite from the solution directory:
+
+```powershell
+dotnet test
+```
+
+Tests live in `DrivingLicenceWorkflow.Tests`, organized into `BusinessRules`, `Api`, and `Saga` areas. Business-rule properties use FsCheck with 100 generated cases per property. API tests exercise controller responses, persistence, and published events using EF Core InMemory and the MassTransit test harness. Saga tests use the in-memory MassTransit test harness; PostgreSQL/RabbitMQ Testcontainers integration tests are deferred.
+
+For manual API checks, open [DrivingLicenceWorkflow.Api.http](./DrivingLicenceWorkflow.Api/DrivingLicenceWorkflow.Api.http) in VS Code and run the requests in order. The default URL targets the API's local HTTP launch profile (`http://localhost:5237`); change `@baseUrl` to `http://localhost:8080` when using Docker Compose. The manual-review requests need the worker running, and the status must reach `PendingManualReview` before choosing either approve or reject.
+
 The saga state machine is orchestration owned by the Worker. Its source currently resides in Shared as an initial implementation choice; planned relocation inside Worker. The persisted saga state model and message contracts remain in Shared because they are shared with persistence and host boundaries.
 
 ## Run with Docker Compose

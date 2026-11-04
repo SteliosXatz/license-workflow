@@ -8,7 +8,6 @@ namespace DrivingLicenceWorkflow.Shared.Sagas;
 
 public class ApplicationWorkflowStateMachine : MassTransitStateMachine<ApplicationWorkflowState>
 {
-    private readonly IAuditService _auditService;
     private readonly WorkflowStateMetrics _metrics;
 
     public State Submitted { get; private set; } = null!;
@@ -23,16 +22,18 @@ public class ApplicationWorkflowStateMachine : MassTransitStateMachine<Applicati
     public Event<ApplicationSubmitted> ApplicationSubmitted { get; private set; } = null!;
     public Event<ApplicationValidated> ApplicationValidated { get; private set; } = null!;
     public Event<ApplicationValidationFailed> ApplicationValidationFailed { get; private set; } = null!;
+    public Event<Fault<ValidateApplication>> ValidateApplicationFaulted { get; private set; } = null!;
     public Event<PhotoChecked> PhotoChecked { get; private set; } = null!;
     public Event<PhotoCheckFailed> PhotoCheckFailed { get; private set; } = null!;
+    public Event<Fault<CheckPhoto>> CheckPhotoFaulted { get; private set; } = null!;
     public Event<RiskApproved> RiskApproved { get; private set; } = null!;
     public Event<RiskManualReviewRequired> RiskManualReviewRequired { get; private set; } = null!;
+    public Event<Fault<AssessRisk>> AssessRiskFaulted { get; private set; } = null!;
     public Event<ManualReviewApproved> ManualReviewApproved { get; private set; } = null!;
     public Event<ManualReviewRejected> ManualReviewRejected { get; private set; } = null!;
 
-    public ApplicationWorkflowStateMachine(IAuditService auditService, WorkflowStateMetrics metrics)
+    public ApplicationWorkflowStateMachine(WorkflowStateMetrics metrics)
     {
-        _auditService = auditService;
         _metrics = metrics;
 
         InstanceState(state => state.CurrentState);
@@ -41,10 +42,13 @@ public class ApplicationWorkflowStateMachine : MassTransitStateMachine<Applicati
         Event(() => ApplicationSubmitted, e => e.CorrelateById(context => context.Message.ApplicationId));
         Event(() => ApplicationValidated, e => e.CorrelateById(context => context.Message.ApplicationId));
         Event(() => ApplicationValidationFailed, e => e.CorrelateById(context => context.Message.ApplicationId));
+        Event(() => ValidateApplicationFaulted, e => e.CorrelateById(context => context.Message.Message.ApplicationId));
         Event(() => PhotoChecked, e => e.CorrelateById(context => context.Message.ApplicationId));
         Event(() => PhotoCheckFailed, e => e.CorrelateById(context => context.Message.ApplicationId));
+        Event(() => CheckPhotoFaulted, e => e.CorrelateById(context => context.Message.Message.ApplicationId));
         Event(() => RiskApproved, e => e.CorrelateById(context => context.Message.ApplicationId));
         Event(() => RiskManualReviewRequired, e => e.CorrelateById(context => context.Message.ApplicationId));
+        Event(() => AssessRiskFaulted, e => e.CorrelateById(context => context.Message.Message.ApplicationId));
         Event(() => ManualReviewApproved, e => e.CorrelateById(context => context.Message.ApplicationId));
         Event(() => ManualReviewRejected, e => e.CorrelateById(context => context.Message.ApplicationId));
 
@@ -55,122 +59,120 @@ public class ApplicationWorkflowStateMachine : MassTransitStateMachine<Applicati
                     context.Saga.CorrelationId = context.Message.ApplicationId;
                     context.Saga.ApplicationId = context.Message.ApplicationId;
                 })
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.Submitted,
-                    ApplicationStatus.ValidatingData,
-                    nameof(ApplicationSubmitted),
-                    null))
+                    ApplicationStatus.ValidatingData))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<ApplicationSubmitted>>())
                 .TransitionTo(ValidatingData)
-                .Send(context => context.Init<ValidateApplication>(
-                    new ValidateApplication(context.Saga.ApplicationId))));
+                .Send(context => new ValidateApplication(context.Saga.ApplicationId)));
+
+        During(ValidatingData, Ignore(ApplicationSubmitted));
+        During(CheckingPhoto, Ignore(ApplicationSubmitted));
+        During(RiskAssessment, Ignore(ApplicationSubmitted));
+        During(PendingManualReview, Ignore(ApplicationSubmitted));
 
         During(ValidatingData,
             When(ApplicationValidated)
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.ValidatingData,
-                    ApplicationStatus.CheckingPhoto,
-                    nameof(ApplicationValidated),
-                    null))
+                    ApplicationStatus.CheckingPhoto))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<ApplicationValidated>>())
                 .TransitionTo(CheckingPhoto)
-                .Send(context => context.Init<CheckPhoto>(
-                    new CheckPhoto(context.Saga.ApplicationId))),
+                .Send(context => new CheckPhoto(context.Saga.ApplicationId)),
 
             When(ApplicationValidationFailed)
                 .Then(context => context.Saga.FailureReason = context.Message.Reason)
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.ValidatingData,
-                    ApplicationStatus.Failed,
-                    nameof(ApplicationValidationFailed),
-                    context.Message.Reason))
+                    ApplicationStatus.Failed))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<ApplicationValidationFailed>>())
+                .TransitionTo(Failed)
+                .Finalize(),
+
+            When(ValidateApplicationFaulted)
+                .Then(context => context.Saga.FailureReason = GetFaultReason(context.Message))
+                .Then(_ => _metrics.RecordTransition(
+                    ApplicationStatus.ValidatingData,
+                    ApplicationStatus.Failed))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<Fault<ValidateApplication>>>())
                 .TransitionTo(Failed)
                 .Finalize());
 
         During(CheckingPhoto,
             When(PhotoChecked)
                 .Then(context => context.Saga.PhotoQualityScore = context.Message.QualityScore)
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.CheckingPhoto,
-                    ApplicationStatus.RiskAssessment,
-                    nameof(PhotoChecked),
-                    null))
+                    ApplicationStatus.RiskAssessment))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<PhotoChecked>>())
                 .TransitionTo(RiskAssessment)
-                .Send(context => context.Init<AssessRisk>(
-                    new AssessRisk(context.Saga.ApplicationId))),
+                .Send(context => new AssessRisk(context.Saga.ApplicationId)),
 
             When(PhotoCheckFailed)
                 .Then(context => context.Saga.FailureReason = context.Message.Reason)
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.CheckingPhoto,
-                    ApplicationStatus.Failed,
-                    nameof(PhotoCheckFailed),
-                    context.Message.Reason))
+                    ApplicationStatus.Failed))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<PhotoCheckFailed>>())
+                .TransitionTo(Failed)
+                .Finalize(),
+
+            When(CheckPhotoFaulted)
+                .Then(context => context.Saga.FailureReason = GetFaultReason(context.Message))
+                .Then(_ => _metrics.RecordTransition(
+                    ApplicationStatus.CheckingPhoto,
+                    ApplicationStatus.Failed))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<Fault<CheckPhoto>>>())
                 .TransitionTo(Failed)
                 .Finalize());
 
         During(RiskAssessment,
             When(RiskApproved)
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.RiskAssessment,
-                    ApplicationStatus.Approved,
-                    nameof(RiskApproved),
-                    null))
+                    ApplicationStatus.Approved))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<RiskApproved>>())
                 .TransitionTo(Approved)
                 .Finalize(),
 
             When(RiskManualReviewRequired)
                 .Then(context => context.Saga.FailureReason = context.Message.Reason)
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.RiskAssessment,
-                    ApplicationStatus.PendingManualReview,
-                    nameof(RiskManualReviewRequired),
-                    context.Message.Reason))
-                .TransitionTo(PendingManualReview));
+                    ApplicationStatus.PendingManualReview))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<RiskManualReviewRequired>>())
+                .TransitionTo(PendingManualReview),
+
+            When(AssessRiskFaulted)
+                .Then(context => context.Saga.FailureReason = GetFaultReason(context.Message))
+                .Then(_ => _metrics.RecordTransition(
+                    ApplicationStatus.RiskAssessment,
+                    ApplicationStatus.Failed))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<Fault<AssessRisk>>>())
+                .TransitionTo(Failed)
+                .Finalize());
 
         During(PendingManualReview,
             When(ManualReviewApproved)
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.PendingManualReview,
-                    ApplicationStatus.Approved,
-                    nameof(ManualReviewApproved),
-                    null))
+                    ApplicationStatus.Approved))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<ManualReviewApproved>>())
                 .TransitionTo(Approved)
                 .Finalize(),
 
             When(ManualReviewRejected)
                 .Then(context => context.Saga.RejectionReason = context.Message.RejectionReason)
-                .ThenAsync(context => RecordTransitionAsync(
-                    context,
+                .Then(_ => _metrics.RecordTransition(
                     ApplicationStatus.PendingManualReview,
-                    ApplicationStatus.Rejected,
-                    nameof(ManualReviewRejected),
-                    context.Message.RejectionReason))
+                    ApplicationStatus.Rejected))
+                .Activity(activity => activity.OfType<WorkflowAuditActivity<ManualReviewRejected>>())
                 .TransitionTo(Rejected)
                 .Finalize());
     }
 
-    private Task RecordTransitionAsync<TMessage>(
-        BehaviorContext<ApplicationWorkflowState, TMessage> context,
-        ApplicationStatus? fromStatus,
-        ApplicationStatus toStatus,
-        string eventName,
-        string? details)
-        where TMessage : class
-    {
-        _metrics.RecordTransition(fromStatus, toStatus);
-        return _auditService.RecordTransitionAsync(
-            context.Saga.ApplicationId,
-            fromStatus,
-            toStatus,
-            eventName,
-            details,
-            context.CancellationToken);
-    }
+    private static string GetFaultReason<TMessage>(Fault<TMessage> fault)
+        where TMessage : class =>
+        fault.Exceptions.FirstOrDefault()?.Message
+        ?? $"{typeof(TMessage).Name} step failed unexpectedly.";
 }

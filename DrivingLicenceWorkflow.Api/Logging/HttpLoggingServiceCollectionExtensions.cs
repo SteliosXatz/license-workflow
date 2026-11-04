@@ -11,7 +11,7 @@ public static class HttpLoggingServiceCollectionExtensions
         {
             options.LoggingFields =
                 HttpLoggingFields.RequestPropertiesAndHeaders |
-                HttpLoggingFields.RequestBody |
+                //HttpLoggingFields.RequestBody |
                 HttpLoggingFields.ResponsePropertiesAndHeaders |
                 HttpLoggingFields.ResponseBody;
             options.CombineLogs = true;
