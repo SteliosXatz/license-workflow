@@ -19,21 +19,25 @@ public sealed class ApplicationsController : ControllerBase
     private readonly IValidator<SubmitApplicationRequest> _submitValidator;
     private readonly IValidator<ManualReviewActionRequest> _manualReviewValidator;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<ApplicationsController> _logger;
 
     public ApplicationsController(
         DrivingLicenceDbContext dbContext,
         IPublishEndpoint publishEndpoint,
         IValidator<SubmitApplicationRequest> submitValidator,
         IValidator<ManualReviewActionRequest> manualReviewValidator,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILogger<ApplicationsController> logger)
     {
         _dbContext = dbContext;
         _publishEndpoint = publishEndpoint;
         _submitValidator = submitValidator;
         _manualReviewValidator = manualReviewValidator;
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
+    /// <summary>Submits an application for asynchronous workflow processing.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(SubmitApplicationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -44,6 +48,9 @@ public sealed class ApplicationsController : ControllerBase
         var validation = await _submitValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
+            _logger.LogWarning(
+                "Application submission validation failed for fields {@ValidationErrors}",
+                validation.Errors.Select(error => error.PropertyName).Distinct().ToArray());
             return BadRequest(new ValidationProblemDetails(validation.ToDictionary()));
         }
 
@@ -82,9 +89,14 @@ public sealed class ApplicationsController : ControllerBase
         await _publishEndpoint.Publish(new ApplicationSubmitted(application.Id), cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        _logger.LogInformation(
+            "Published workflow event {Event} for application {ApplicationId}",
+            nameof(ApplicationSubmitted),
+            application.Id);
         return Ok(new SubmitApplicationResponse(application.Id, application.Status));
     }
 
+    /// <summary>Gets the current workflow status of an application.</summary>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(ApplicationStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -105,6 +117,7 @@ public sealed class ApplicationsController : ControllerBase
         return application is null ? NotFound() : Ok(application);
     }
 
+    /// <summary>Gets the audit history of an application.</summary>
     [HttpGet("{id:guid}/history")]
     [ProducesResponseType(typeof(AuditTrailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -136,6 +149,7 @@ public sealed class ApplicationsController : ControllerBase
         return Ok(new AuditTrailResponse(entries));
     }
 
+    /// <summary>Requests approval of an application awaiting manual review.</summary>
     [HttpPost("{id:guid}/approve")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -156,6 +170,11 @@ public sealed class ApplicationsController : ControllerBase
 
         if (status != ApplicationStatus.PendingManualReview)
         {
+            _logger.LogWarning(
+                "Rejected event {Event} for application {ApplicationId} in state {ApplicationStatus}",
+                nameof(ManualReviewApproved),
+                id,
+                status);
             return Conflict(new ProblemDetails
             {
                 Title = "Invalid application state transition.",
@@ -165,9 +184,14 @@ public sealed class ApplicationsController : ControllerBase
 
         await _publishEndpoint.Publish(new ManualReviewApproved(id), cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Published workflow event {Event} for application {ApplicationId}",
+            nameof(ManualReviewApproved),
+            id);
         return Ok(new { ApplicationId = id });
     }
 
+    /// <summary>Requests rejection of an application awaiting manual review.</summary>
     [HttpPost("{id:guid}/reject")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -181,6 +205,10 @@ public sealed class ApplicationsController : ControllerBase
         var validation = await _manualReviewValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
+            _logger.LogWarning(
+                "Manual rejection validation failed for application {ApplicationId} on fields {@ValidationErrors}",
+                id,
+                validation.Errors.Select(error => error.PropertyName).Distinct().ToArray());
             return BadRequest(new ValidationProblemDetails(validation.ToDictionary()));
         }
 
@@ -196,6 +224,11 @@ public sealed class ApplicationsController : ControllerBase
 
         if (status != ApplicationStatus.PendingManualReview)
         {
+            _logger.LogWarning(
+                "Rejected event {Event} for application {ApplicationId} in state {ApplicationStatus}",
+                nameof(ManualReviewRejected),
+                id,
+                status);
             return Conflict(new ProblemDetails
             {
                 Title = "Invalid application state transition.",
@@ -205,6 +238,10 @@ public sealed class ApplicationsController : ControllerBase
 
         await _publishEndpoint.Publish(new ManualReviewRejected(id, request.Reason!), cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Published workflow event {Event} for application {ApplicationId}",
+            nameof(ManualReviewRejected),
+            id);
         return Ok(new { ApplicationId = id });
     }
 }

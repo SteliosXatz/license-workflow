@@ -24,6 +24,14 @@ Compose starts the API and Worker after PostgreSQL and RabbitMQ are healthy. Pos
 
 To stop the services, run `docker compose down`. The PostgreSQL data volume is preserved; to reset it, run `docker compose down --volumes`.
 
+## Logging and Swagger
+
+Both hosts use Serilog as their only logging provider. Logs are written as structured JSON, with daily rolling files and 31 retained files. By default, each host writes `logs/app-<date>.log`; Docker Compose mounts these directories on the host as `logs/api` and `logs/worker`. The `logs/` directory is ignored by Git.
+
+Override the path with the `Logging__FilePath` environment variable (for example, `Logging__FilePath=/var/log/driving-licence/app-.log`). The file sink creates the parent directory when needed. API request logs and workflow events include structured application IDs, event names, and state transitions; errors are written with their associated application IDs where available.
+
+Swagger UI is available at <http://localhost:8080/swagger> in all environments. Controller XML comments are included in the generated OpenAPI document.
+
 ## Data model
 
 A single `DrivingLicenceDbContext` (in `DrivingLicenceWorkflow.Shared/Data`) maps every table. The API registers it with the `AppDb` connection string (`api_user`) and the Worker registers the same class with `WorkerDb` (`worker_user`); least privilege is enforced by the PostgreSQL role grants in `docker/postgres/init/01-roles.sql`, not by separate contexts. The Worker can read application data required by its consumers and update only workflow-owned columns (`Status`, `UpdatedAt`, and `PhotoQualityScore`). Table names must stay in sync with those grants.

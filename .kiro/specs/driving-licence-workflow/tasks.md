@@ -282,8 +282,8 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document RabbitMQ + MassTransit setup, outbox pattern, retry/DLQ configuration, saga persistence
     - _Requirements: 9.4, 10.1, 10.4_
 
-- [ ] 11. Serilog + Swagger [CORE]
-  - [ ] 11.1 Configure Serilog in API and Worker Program.cs
+- [x] 11. Serilog + Swagger [CORE]
+  - [x] 11.1 Configure Serilog in API and Worker Program.cs
     - Serilog as logging provider in both projects, file sink only (no console)
     - Structured JSON format (Serilog.Sinks.File with JSON formatter)
     - Rolling file with daily rotation and retention
@@ -291,13 +291,13 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Structured logging throughout: log ApplicationId, state transitions, events, errors with property destructuring
     - _Requirements: 11.4_
 
-  - [ ] 11.2 Configure Swagger in API
+  - [x] 11.2 Configure Swagger in API
     - `AddSwaggerGen` with XML comments from controller assembly
     - `UseSwagger` and `UseSwaggerUI` at `/swagger` endpoint
     - Available in all environments including local Docker Compose
     - _Requirements: 11.3_
 
-  - [ ] 11.3 Update README with logging and Swagger documentation
+  - [x] 11.3 Update README with logging and Swagger documentation
     - Document Serilog configuration, log file location/format, Swagger UI access path
     - _Requirements: 11.3, 11.4_
 

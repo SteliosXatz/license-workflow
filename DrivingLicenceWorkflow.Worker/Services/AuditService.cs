@@ -10,11 +10,16 @@ public sealed class AuditService : IAuditService
 {
     private readonly DrivingLicenceDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<AuditService> _logger;
 
-    public AuditService(DrivingLicenceDbContext dbContext, TimeProvider timeProvider)
+    public AuditService(
+        DrivingLicenceDbContext dbContext,
+        TimeProvider timeProvider,
+        ILogger<AuditService> logger)
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
     public async Task RecordTransitionAsync(
@@ -45,6 +50,16 @@ public sealed class AuditService : IAuditService
 
         application.Status = toStatus;
         application.UpdatedAt = timestamp;
+
+        _logger.LogInformation(
+            "Recorded workflow transition {@Transition}",
+            new
+            {
+                ApplicationId = applicationId,
+                FromStatus = fromStatus,
+                ToStatus = toStatus,
+                Event = eventName
+            });
 
         // The saga repository saves this shared DbContext with the saga state.
     }

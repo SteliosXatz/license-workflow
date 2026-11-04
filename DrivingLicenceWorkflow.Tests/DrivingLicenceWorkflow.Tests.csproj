@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DrivingLicenceWorkflow.Shared\DrivingLicenceWorkflow.Shared.csproj" />
+    <ProjectReference Include="..\DrivingLicenceWorkflow.Api\DrivingLicenceWorkflow.Api.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using DrivingLicenceWorkflow.Api.Contracts;
+using DrivingLicenceWorkflow.Api.Controllers;
 using DrivingLicenceWorkflow.Api.Validators;
 using DrivingLicenceWorkflow.Shared.Data;
 using DrivingLicenceWorkflow.Shared.Services;
@@ -14,7 +15,16 @@ public static class ApiServiceCollectionExtensions
     public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddEndpointsApiExplorer();
-        services.AddSwaggerGen();
+        services.AddSwaggerGen(options =>
+        {
+            var controllerAssembly = typeof(ApplicationsController).Assembly;
+            var xmlFile = $"{controllerAssembly.GetName().Name}.xml";
+            var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+            if (File.Exists(xmlPath))
+            {
+                options.IncludeXmlComments(xmlPath);
+            }
+        });
         services
             .AddControllers()
             .AddJsonOptions(options =>
