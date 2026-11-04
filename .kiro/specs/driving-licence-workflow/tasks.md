@@ -218,8 +218,8 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document the audit trail design: append-only entries, IAuditService called from saga .Then() blocks, status sync within same transaction
     - _Requirements: 4.2, 5.3_
 
-- [ ] 9. API layer [CORE]
-  - [ ] 9.1 Create request/response DTOs (records)
+- [x] 9. API layer [CORE]
+  - [x] 9.1 Create request/response DTOs (records)
     - `SubmitApplicationRequest`: FirstName, LastName, DateOfBirth, NationalId, Email, PhoneNumber, Address, LicenceCategory, PhotoBase64
     - `SubmitApplicationResponse`: ApplicationId (Guid), Status (ApplicationStatus)
     - `ApplicationStatusResponse`: Id, Status, CreatedAt, UpdatedAt
@@ -227,7 +227,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - `ManualReviewActionRequest`: Reason (string, for reject)
     - _Requirements: 1.1, 2.1, 3.2, 4.1_
 
-  - [ ] 9.2 Implement SubmitApplicationRequestValidator (FluentValidation)
+  - [x] 9.2 Implement SubmitApplicationRequestValidator (FluentValidation)
     - Rules: FirstName, LastName, DateOfBirth, NationalId, Email, PhoneNumber, Address, LicenceCategory not empty
     - Email valid format
     - Applicant age >= 18 (from DateOfBirth)
@@ -235,7 +235,7 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - On failure, returns 400 with descriptive error listing failing fields
     - _Requirements: 1.4, 1.5, 1.6, 1.7_
 
-  - [ ] 9.3 Implement ApplicationsController
+  - [x] 9.3 Implement ApplicationsController
     - `POST /api/applications`: validate via FluentValidation, persist Application with Status=Submitted + initial AuditTrailEntry, publish `ApplicationSubmitted` via IPublishEndpoint (EF Core outbox), return 200 with applicationId + status Submitted
     - `GET /api/applications/{id}`: return Id, Status, CreatedAt, UpdatedAt; 404 if not found
     - `GET /api/applications/{id}/history`: return ordered audit trail (by Timestamp); 404 if not found
@@ -244,12 +244,12 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Depends on `DrivingLicenceDbContext` for persistence/reads and `IPublishEndpoint` for publishing
     - _Requirements: 1.1, 1.3, 1.4, 2.1, 2.2, 3.1, 3.2, 3.3, 3.4, 4.1, 4.3_
 
-  - [ ] 9.4 Register DrivingLicenceDbContext with AppDb + IPublishEndpoint in API Program.cs
+  - [x] 9.4 Register DrivingLicenceDbContext with AppDb + IPublishEndpoint in API Program.cs
     - Register `DrivingLicenceDbContext` with `AppDb` connection string (api_user credentials)
     - Configure `IPublishEndpoint` with EF Core outbox (`UseEntityFrameworkOutbox<DrivingLicenceDbContext>`)
     - _Requirements: 1.1, 10.2_
 
-  - [ ] 9.5 Update README with API endpoints documentation
+  - [x] 9.5 Update README with API endpoints documentation
     - Document all 5 endpoints with HTTP method, path, request/response shapes, status codes
     - _Requirements: 1.1, 2.1, 3.1, 4.1, 11.3_
 

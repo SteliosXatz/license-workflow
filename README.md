@@ -164,3 +164,17 @@ All 12 messages are C# records in `DrivingLicenceWorkflow.Shared/Messages`. `App
 | `RiskManualReviewRequired` | Event | `RiskAssessmentConsumer` | Saga | `Reason` |
 | `ManualReviewApproved` | Event | API | Saga | |
 | `ManualReviewRejected` | Event | API | Saga | `RejectionReason` |
+
+## API endpoints
+
+The API is available at `http://localhost:8080`; Swagger UI is served at `/swagger`.
+
+| Method and path | Request | Success response | Other responses |
+|-----------------|---------|------------------|-----------------|
+| `POST /api/applications` | Applicant fields: `firstName`, `lastName`, `dateOfBirth`, `nationalId`, `email`, `phoneNumber`, `address`, `licenceCategory`, `photoBase64` (base64 string). | `200`: `{ "applicationId": "...", "status": "Submitted" }` | `400`: descriptive field validation errors. |
+| `GET /api/applications/{id}` | — | `200`: `id`, `status`, `createdAt`, `updatedAt`. | `404`: application not found. |
+| `GET /api/applications/{id}/history` | — | `200`: `{ "entries": [{ "timestamp", "fromStatus", "toStatus", "event", "details" }] }`, oldest first. | `404`: application not found. |
+| `POST /api/applications/{id}/approve` | — | `200`: application ID; approval event is queued for the saga. | `404`: application not found; `409`: not awaiting manual review. |
+| `POST /api/applications/{id}/reject` | `{ "reason": "..." }` (required, at most 1000 characters). | `200`: application ID; rejection event is queued for the saga. | `400`: invalid reason; `404`: application not found; `409`: not awaiting manual review. |
+
+Submission persists the application and its initial `Submitted` audit entry, then publishes `ApplicationSubmitted` through the EF Core bus outbox in the same `SaveChangesAsync`. Manual-review requests publish events; the saga performs the eventual status and audit updates.
