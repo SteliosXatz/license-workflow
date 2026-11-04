@@ -202,19 +202,19 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document each step consumer's responsibility, input command, and output events
     - _Requirements: 6.1, 7.1, 8.1_
 
-- [ ] 8. Audit service [CORE]
-  - [ ] 8.1 Implement AuditService in Worker
+- [x] 8. Audit service [CORE]
+  - [x] 8.1 Implement AuditService in Worker
     - Implements `IAuditService.RecordTransitionAsync`
     - Writes a new `AuditTrailEntry` row (Id, ApplicationId, Timestamp UTC, FromStatus, ToStatus, Event, Details)
     - Updates `Application.Status` to the new status and `Application.UpdatedAt` to current UTC
     - Both operations in the same DbContext transaction (saga transaction)
     - _Requirements: 4.2, 5.3, 9.3_
 
-  - [ ] 8.2 Register AuditService in Worker DI
+  - [x] 8.2 Register AuditService in Worker DI
     - Register `IAuditService` → `AuditService` in Worker Program.cs DI
     - _Requirements: 4.2, 5.3_
 
-  - [ ] 8.3 Update README with audit approach
+  - [x] 8.3 Update README with audit approach
     - Document the audit trail design: append-only entries, IAuditService called from saga .Then() blocks, status sync within same transaction
     - _Requirements: 4.2, 5.3_
 
