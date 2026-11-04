@@ -172,33 +172,33 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document correlation: `ApplicationId` is the key, `CorrelationId` is set equal to it when `ApplicationSubmitted` creates the saga, commands are not correlated, and unmatched events are discarded (replace the Message contracts sentence with this)
     - _Requirements: 5.1, 5.2, 10.1_
 
-- [ ] 7. Step consumers [CORE]
-  - [ ] 7.1 Implement ValidateApplicationConsumer
+- [x] 7. Step consumers [CORE]
+  - [x] 7.1 Implement ValidateApplicationConsumer
     - Consumes `ValidateApplication` command
     - Loads Application from DrivingLicenceDbContext (WorkerDb connection)
     - Calls `IDataValidationService.Validate` with application data
     - Publishes `ApplicationValidated` (valid) or `ApplicationValidationFailed` with reason (invalid)
     - _Requirements: 6.1, 6.2, 6.3_
 
-  - [ ] 7.2 Implement CheckPhotoConsumer
+  - [x] 7.2 Implement CheckPhotoConsumer
     - Consumes `CheckPhoto` command
     - Loads Application from DrivingLicenceDbContext
     - Calls `IPhotoCheckService.Check` with photo base64
     - Publishes `PhotoChecked` with quality score (acceptable) or `PhotoCheckFailed` with reason (failed)
     - _Requirements: 7.1, 7.2, 7.3_
 
-  - [ ] 7.3 Implement RiskAssessmentConsumer
+  - [x] 7.3 Implement RiskAssessmentConsumer
     - Consumes `AssessRisk` command
     - Loads Application and stored PhotoQualityScore from DrivingLicenceDbContext
     - Calls `IRiskAssessmentService.Assess` with risk input
     - Publishes `RiskApproved` (no manual review needed) or `RiskManualReviewRequired` with reason (manual review needed)
     - _Requirements: 8.1, 8.2, 8.3_
 
-  - [ ] 7.4 Register all consumers in Worker DI
+  - [x] 7.4 Register all consumers in Worker DI
     - Register `ValidateApplicationConsumer`, `CheckPhotoConsumer`, `RiskAssessmentConsumer` in Worker Program.cs DI
     - _Requirements: 9.2_
 
-  - [ ] 7.5 Update README with consumer overview
+  - [x] 7.5 Update README with consumer overview
     - Document each step consumer's responsibility, input command, and output events
     - _Requirements: 6.1, 7.1, 8.1_
 
