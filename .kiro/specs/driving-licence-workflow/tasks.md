@@ -446,8 +446,8 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Document how to run tests (`dotnet test`), test project structure, what each test category covers, FsCheck iteration count
     - _Requirements: 12.1, 12.2, 12.3_
 
-- [ ] 14. README final pass [STRETCH]
-  - [ ] 14.1 Final README pass
+- [x] 14. README final pass [STRETCH]
+  - [x] 14.1 Final README pass
     - Architecture explanation with diagram references (or links to design doc)
     - Setup instructions (docker compose up, .env setup, .env.example)
     - Design decisions and trade-offs (saga vs custom state machine, single DbContext, outbox, status sync, audit via .Then() blocks, Serilog file sink)
@@ -469,24 +469,6 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
     - Verify the solution builds, all tests pass, saga harness/property tests still exercise the moved Worker state machine, and API has no dependency on the Worker project.
     - _Requirements: 5.1, 5.2, 9.2_
 
-> **Checkpoint (after task 5):** Ensure all core tests pass, ask the user if questions arise. Verify business rule services compile and basic unit tests pass.
-
-> **Checkpoint (after task 10):** Ensure all core tests pass, ask the user if questions arise. Verify full end-to-end flow works via docker compose up and Swagger.
-
-> **Checkpoint (after task 13):** Ensure all core tests pass, ask the user if questions arise. Verify all unit tests, saga tests, and property tests pass.
-
-## Notes
-
-- Tasks marked **[CORE]** (1–11, 13) are prioritized for the 6-hour implementation window. Tasks marked **[STRETCH]** (12, 14) are implemented if time permits.
-- Sub-tasks marked with `*` are test-related and optional — the implementing agent may skip them. They are included for completeness and can be executed after core implementation.
-- Each task includes an "Update README" sub-task per the design document's incremental README convention — the README is a living document updated as each task lands.
-- Property tests (13.6–13.16) each correspond to a correctness property from the design document, annotated with the property number, validating requirements, and FsCheck tag comment.
-- The design document uses C#/.NET (not pseudocode), so no language selection step was needed.
-- The design overrides the requirements document's "custom state machine" approach with a MassTransit orchestration saga (Automatonymous). This is documented in the design's Design Decisions section.
-- A single shared `DrivingLicenceDbContext` is used by both API and Worker with different connection strings (api_user vs worker_user) for least-privilege enforcement at the PostgreSQL role level.
-- The outbox pattern is implemented via MassTransit's `UseEntityFrameworkOutbox<TDbContext>()` — no custom dispatcher code needed.
-- In-place startup migration is used for the simplified single-instance setup; the comment block in Program.cs documents the multi-node production alternative.
-- The saga state machine is currently located in Shared for the initial implementation. Task 15 tracks its move to Worker; the saga instance and message contracts remain shared.
 
 - [ ] 16. User identity and audit trail enrichment [FOLLOW-UP]
   - [ ] 16.1 Add user identity to all API endpoints
@@ -552,6 +534,26 @@ The system is scoped for a 6-hour implementation window. Tasks 1–11 are core; 
 - [ ] ReviewSubmitted intermediate state and synchronous manual review - Task 17
 - [ ] Promote worker_user to schema owner, move migrations to Worker - Task 18
 - [ ] Optional: validate at startup that `PhotoCheck:MinPhotoQualityScore` < `RiskAssessment:PhotoQualityThreshold`, otherwise the risk rule for photo score can never trigger.
+
+
+> **Checkpoint (after task 5):** Ensure all core tests pass, ask the user if questions arise. Verify business rule services compile and basic unit tests pass.
+
+> **Checkpoint (after task 10):** Ensure all core tests pass, ask the user if questions arise. Verify full end-to-end flow works via docker compose up and Swagger.
+
+> **Checkpoint (after task 13):** Ensure all core tests pass, ask the user if questions arise. Verify all unit tests, saga tests, and property tests pass.
+
+## Notes
+
+- Tasks marked **[CORE]** (1–11, 13) are prioritized for the 6-hour implementation window. Tasks marked **[STRETCH]** (12, 14) are implemented if time permits.
+- Sub-tasks marked with `*` are test-related and optional — the implementing agent may skip them. They are included for completeness and can be executed after core implementation.
+- Each task includes an "Update README" sub-task per the design document's incremental README convention — the README is a living document updated as each task lands.
+- Property tests (13.6–13.16) each correspond to a correctness property from the design document, annotated with the property number, validating requirements, and FsCheck tag comment.
+- The design document uses C#/.NET (not pseudocode), so no language selection step was needed.
+- The design overrides the requirements document's "custom state machine" approach with a MassTransit orchestration saga (Automatonymous). This is documented in the design's Design Decisions section.
+- A single shared `DrivingLicenceDbContext` is used by both API and Worker with different connection strings (api_user vs worker_user) for least-privilege enforcement at the PostgreSQL role level.
+- The outbox pattern is implemented via MassTransit's `UseEntityFrameworkOutbox<TDbContext>()` — no custom dispatcher code needed.
+- In-place startup migration is used for the simplified single-instance setup; the comment block in Program.cs documents the multi-node production alternative.
+- The saga state machine is currently located in Shared for the initial implementation. Task 15 tracks its move to Worker; the saga instance and message contracts remain shared.
 
 ## Task Dependency Graph
 

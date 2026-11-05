@@ -9,6 +9,25 @@ A .NET 8 backend for submitting and processing driving licence applications thro
 - `DrivingLicenceWorkflow.Shared` — shared domain, message contracts, services, and persistence components
 - `DrivingLicenceWorkflow.Tests` — xUnit tests
 
+## Architecture
+
+The API validates requests, writes applications and their initial audit entries to PostgreSQL, and publishes workflow events through the MassTransit EF Core bus outbox. RabbitMQ carries those events to the Worker, where a MassTransit state-machine saga coordinates the step consumers. The Worker uses the EF Core consume outbox so saga state, application status, audit entries, and outgoing messages are committed together. The API and Worker share the `DrivingLicenceDbContext` type but use separate database credentials.
+
+```mermaid
+flowchart LR
+    Client --> API[Application API]
+    API -->|application, initial audit, bus outbox| DB[(PostgreSQL)]
+    API -->|outbox delivery| MQ[(RabbitMQ)]
+    MQ --> Saga[Worker saga]
+    Saga --> Consumers[Step consumers]
+    Consumers -->|results| Saga
+    Saga -->|saga state, status, audit, consume outbox| DB
+    Consumers -->|application data| DB
+    Saga -->|outgoing commands/events| MQ
+```
+
+The workflow uses a MassTransit state-machine saga rather than a bespoke state machine. The Worker owns orchestration at runtime.
+
 ## Tests
 
 Run the test suite from the solution directory:
@@ -17,11 +36,17 @@ Run the test suite from the solution directory:
 dotnet test
 ```
 
-Tests live in `DrivingLicenceWorkflow.Tests`, organized into `BusinessRules`, `Api`, and `Saga` areas. Business-rule properties use FsCheck with 100 generated cases per property. API tests exercise controller responses, persistence, and published events using EF Core InMemory and the MassTransit test harness. Saga tests use the in-memory MassTransit test harness; PostgreSQL/RabbitMQ Testcontainers integration tests are deferred.
+Tests live in `DrivingLicenceWorkflow.Tests`, organized into `BusinessRules`, `Api`, `Saga`, `Logging`, `Observability`, and `Worker` areas. FsCheck properties run up to 100 generated cases each.
+
+- **Business rules:** age/date validation and photo size, quality-score, and risk-assessment boundaries.
+- **API:** controller validation, submission/status/history responses, manual-review approve/reject preconditions, persistence, and published events. These tests use EF Core InMemory and the MassTransit test harness.
+- **Saga:** normal approval and manual-review paths, valid state/event transitions, audit trail contents and ordering, and duplicate submission handling while a saga is active. Repeating `ApplicationSubmitted` must not add an audit transition or resend `ValidateApplication`. The tests also cover explicit step failures and unexpected exceptions from validation, photo-check, and risk-assessment consumers; a handled `Fault<T>` records the failure reason and fails the saga without advancing to the next step.
+- **Logging, observability, and worker:** tests for logging behavior, workflow metrics, and worker dependency registration, including scoped-service resolution.
+
+The suite uses in-memory persistence and messaging; PostgreSQL/RabbitMQ Testcontainers integration tests are deferred. It therefore does not verify the production database, broker, container startup, or end-to-end recovery behavior.
 
 For manual API checks, open [DrivingLicenceWorkflow.Api.http](./DrivingLicenceWorkflow.Api/DrivingLicenceWorkflow.Api.http) in VS Code and run the requests in order. The default URL targets the API's local HTTP launch profile (`http://localhost:5237`); change `@baseUrl` to `http://localhost:8080` when using Docker Compose. The manual-review requests need the worker running, and the status must reach `PendingManualReview` before choosing either approve or reject.
 
-The saga state machine is orchestration owned by the Worker. Its source currently resides in Shared as an initial implementation choice; planned relocation inside Worker. The persisted saga state model and message contracts remain in Shared because they are shared with persistence and host boundaries.
 
 ## Run with Docker Compose
 
@@ -67,14 +92,14 @@ The API uses ASP.NET Core's built-in HTTP logging (`AddPiiMaskedHttpLogging()` a
 `WorkflowMessageObserver` (`DrivingLicenceWorkflow.Worker/Logging`) is registered as a MassTransit consume, publish and send observer. It writes one structured entry for each message consumed, published or sent, with the message type, `MessageId`, `ApplicationId` and, for sends, the destination; consumed messages also log how long the receive took. Faults are logged at `Error` with the exception. Message bodies are never logged. The workflow messages carry only the application ID and short reasons, and applicant data stays in PostgreSQL, so there is no PII to mask on the bus. RabbitMQ itself does not log message payloads in the application logs.
 ## Data model
 
-A single `DrivingLicenceDbContext` (in `DrivingLicenceWorkflow.Shared/Data`) maps every table. The API registers it with the `AppDb` connection string (`api_user`) and the Worker registers the same class with `WorkerDb` (`worker_user`); least privilege is enforced by the PostgreSQL role grants in `docker/postgres/init/01-roles.sql`, not by separate contexts. The Worker can read application data required by its consumers and update only workflow-owned columns (`Status`, `UpdatedAt`, and `PhotoQualityScore`). Table names must stay in sync with those grants.
+A single `DrivingLicenceDbContext` (in `DrivingLicenceWorkflow.Shared/Data`) maps every table. The API registers it with the `AppDb` connection string (`api_user`) and the Worker registers the same class with `WorkerDb` (`worker_user`). The grants in `docker/postgres/init/01-roles.sql` restrict the Worker's application-row updates to workflow-owned columns (`Status`, `UpdatedAt`, and `PhotoQualityScore`), but they do not provide complete least privilege: the Worker has `ALL PRIVILEGES` on the audit table and saga/inbox/outbox tables, and `api_user` has schema-level `CREATE` and owns tables created by its migrations. The current grants are a demo safeguard, not a production security boundary. Table names must stay in sync with those grants.
 
 The PostgreSQL init script runs only when the data volume is first created. If using a volume initialized before the Worker grants were expanded, apply the corresponding `GRANT SELECT ON "Applications" TO worker_user` and `GRANT UPDATE ("Status", "UpdatedAt", "PhotoQualityScore") ON "Applications" TO worker_user` as the database owner.
 
 | Table | Entity | Notes |
 |-------|--------|-------|
 | `Applications` | `Application` | Applicant data, photo, denormalized `Status`, `RejectionReason`, `PhotoQualityScore`, UTC `CreatedAt`/`UpdatedAt` |
-| `AuditTrailEntry` | `AuditTrailEntry` | Append-only transition history; FK to `Applications`; indexed on `(ApplicationId, Timestamp)` |
+| `AuditTrailEntry` | `AuditTrailEntry` | Transition history appended by the workflow; FK to `Applications`; indexed on `(ApplicationId, Timestamp)`. Append-only is an application convention, not enforced by the current Worker database grant. |
 | `ApplicationWorkflowState` | `ApplicationWorkflowState` | MassTransit saga instance; `CorrelationId` equals the application Id; one-to-one with `Applications` |
 | `OutboxMessage`, `OutboxState`, `InboxState` | MassTransit | Transactional outbox / idempotent inbox |
 
@@ -149,14 +174,6 @@ Worker `appsettings.json`:
 
 Keep `DataValidation` values consistent between hosts so the API and Worker apply the same age rule. If overriding it, set `DataValidation__MinApplicantAge` on both the `api` and `worker` services in `docker-compose.yml`. Worker-only overrides such as `RiskAssessment__PhotoQualityThreshold=70`, `PhotoCheck__MinPhotoQualityScore=30` and `RiskAssessment__WatchlistPath=/data/watchlist.txt` belong only under the `worker` service.
 
-## Tests
-
-```powershell
-dotnet test
-```
-
-`DrivingLicenceWorkflow.Tests/BusinessRules` holds the unit tests for the business rule services: data validation, photo check, risk assessment, the file watchlist provider, and the per-host DI registration. Age rules run against a fixed clock (`FakeTimeProvider`, 2026-06-15 UTC) so boundary cases such as "turns 18 today" and leap-day birthdays do not depend on the day the tests run. Photo tests build photos of an exact size and score by varying filler bytes, so size and score boundaries are hit exactly.
-
 ## Saga state machine
 
 The Worker orchestrates each application with `ApplicationWorkflowStateMachine`. It defines eight states and nine event-driven transitions:
@@ -175,11 +192,11 @@ stateDiagram-v2
     PendingManualReview --> Rejected: ManualReviewRejected
 ```
 
-Handlers are state-specific, so duplicate or out-of-order events cannot rerun a transition or its command. Terminal states are finalized and cannot advance further. Each transition records its event and optional reason through `IAuditService`, which also synchronizes `Application.Status`.
+Handlers are state-specific. A repeated `ApplicationSubmitted` received while the saga is active is explicitly ignored; other events that do not match the current state are not treated as successful transitions and can fault into the endpoint error queue. Terminal states are finalized and their saga rows are deleted. This means a late event for a deleted saga is not guaranteed to be discarded, and a fresh `ApplicationSubmitted` for a terminal application can create a new saga. Do not treat finalization as protection against replay. Each accepted transition records its event and optional reason through `IAuditService`, which also synchronizes `Application.Status`.
 
 ## Audit trail
 
-The Worker `AuditService` appends one `AuditTrailEntry` for each saga transition, including its UTC timestamp, previous and new statuses, event name, and optional details. It also updates the application's denormalized `Status` and `UpdatedAt`. Both changes are staged on the same scoped `DrivingLicenceDbContext` as saga persistence; the service does not save independently, so the saga repository commits the audit entry, application update, and saga state together. Audit entries are added rather than updated or deleted by the workflow.
+The Worker `AuditService` appends one `AuditTrailEntry` for each saga transition, including its UTC timestamp, previous and new statuses, event name, and optional details. It also updates the application's denormalized `Status` and `UpdatedAt`. The state machine attaches a `WorkflowAuditActivity` to each transition; the activity calls the audit service. Both changes are staged on the same scoped `DrivingLicenceDbContext` as saga persistence; the service does not save independently, so the consume outbox commits the audit entry, application update, and saga state together. Audit entries are added rather than updated or deleted by the workflow. A general MassTransit pipeline observer or filter for automatic audit detection is a documented alternative, not the implementation used here.
 
 ## Step consumers
 
@@ -197,11 +214,21 @@ The API and Worker connect to RabbitMQ using `RabbitMQ__Host`, `RabbitMQ__Userna
 
 The Worker persists saga instances with MassTransit's EF Core repository in PostgreSQL using `ConnectionStrings__WorkerDb`. The saga endpoint and each step-consumer endpoint use the EF Core consume outbox so state/audit changes and outgoing workflow messages are committed together before broker delivery. Commands are sent to the dedicated `validate-application`, `check-photo`, and `assess-risk` queues; saga events are handled by `workflow-saga`.
 
-All Worker endpoints apply exponential retry (five retries, 1-second minimum and 30-second maximum delay) to every exception except `WorkflowValidationException`, which marks permanent missing-data and message-contract failures and is not retried. MassTransit routes exhausted or non-retryable failures to the endpoint's error queue (for example, `workflow-saga_error`). RabbitMQ retains queued messages while the Worker is unavailable.
+All Worker endpoints apply exponential in-process retry (five retries, 1-second minimum and 30-second maximum delay) to exceptions other than `WorkflowValidationException`, which marks a permanent missing-data or message-contract failure and is not retried. A failed step publishes a MassTransit `Fault<T>` event. When the saga successfully consumes a fault for its current step, it records the fault reason in the audit history and moves the application to `Failed`. Messages whose retries are exhausted, or that cannot be handled by their endpoint, are also routed to that endpoint's error queue (for example, `workflow-saga_error`). If the fault event cannot be processed, the application may remain in an intermediate status while the message is in an error queue. No automated error-queue replay tool or operator runbook is included. RabbitMQ retains queued messages while the Worker is unavailable; this does not by itself guarantee that every error-queue message is safe to replay.
+
+### Delivery, duplicates, and recovery
+
+The API's EF Core bus outbox stores the application update and outgoing event together. If the API stops after committing but before sending, the outbox can deliver the event when the service resumes. On Worker endpoints, the EF Core consume outbox commits saga state, audit/status changes, and outgoing messages together. If a Worker crashes before that transaction commits, the transaction rolls back and RabbitMQ can redeliver the message. If it crashes after commit but before acknowledging the delivery, the inbox recognizes the already-processed `MessageId` during its duplicate-detection window and prevents the same delivery from repeating its effects.
+
+This protection is message-ID deduplication, not general business-level idempotency. A newly published message with the same application ID has a different `MessageId`. Repeated `ApplicationSubmitted` messages are ignored while the saga is active, but a replay after finalization can create a new saga because finalization removes the saga row. That new saga can move an already terminal application's status back to `ValidatingData` and restart processing. Unknown-saga and other out-of-state events are not configured for automatic discard; depending on the event and state, they can be retried and routed to an error queue.
+
+There is no automated dead-letter/error-queue replay procedure in this project. Before any manual recovery, inspect the endpoint's error message, application status, audit history, and saga state; establish whether the original transaction committed and whether the application is terminal. Do not blindly shovel messages back to the live queue: a replayed submission can restart a finalized application, while a late event can be unprocessable. A production deployment should provide an authenticated, audited recovery process with explicit replay safeguards.
+
+Manual approve/reject requests first read the application's current status and then publish an event through the outbox. The check and publish are not an atomic compare-and-set: concurrent reviewers can both receive `200`, even though only one event can advance the saga. Clients should read the resulting status/history rather than interpret the response as proof that their decision won. This race needs an atomic state-claim or equivalent coordination before production use.
 
 ## Message contracts
 
-All 12 messages are C# records in `DrivingLicenceWorkflow.Shared/Messages`. `ApplicationId` is the correlation key: `CorrelationId` is set to that value when `ApplicationSubmitted` creates the saga. Commands are sent to step consumers and are not saga-correlated. Events for an unknown saga are discarded. Events are published; commands are sent to a specific consumer queue.
+All 12 messages are C# records in `DrivingLicenceWorkflow.Shared/Messages`. `ApplicationId` is the correlation key: `CorrelationId` is set to that value when `ApplicationSubmitted` creates the saga. Commands are sent to step consumers and are not saga-correlated. Events are published; commands are sent to a specific consumer queue. Missing-instance behavior is not configured to discard events: an event for a saga that no longer exists can fault and be routed to the saga endpoint's error queue. The exception is a fresh `ApplicationSubmitted`, which can create a new saga in the initial state.
 
 | Message | Kind | Publisher | Consumer | Extra fields |
 |---------|------|-----------|----------|--------------|
@@ -231,3 +258,50 @@ The API is available at `http://localhost:8080`; Swagger UI is served at `/swagg
 | `POST /api/applications/{id}/reject` | `{ "reason": "..." }` (required, at most 1000 characters). | `200`: application ID; rejection event is queued for the saga. | `400`: invalid reason; `404`: application not found; `409`: not awaiting manual review. |
 
 Submission persists the application and its initial `Submitted` audit entry, then publishes `ApplicationSubmitted` through the EF Core bus outbox in the same `SaveChangesAsync`. Manual-review requests publish events; the saga performs the eventual status and audit updates.
+
+## Documented stretch enhancements
+
+These are optional approaches from the design, not capabilities currently provided by the application:
+
+| Enhancement | Current status |
+|-------------|----------------|
+| `X-Idempotency-Key` on submission | Not implemented; the API does not inspect this header, so retrying the HTTP submission can create another application. The inbox and active-saga duplicate guard cover message delivery, not API-level deduplication by client key. A cache could provide short-lived key-to-response mapping; a shared store such as Redis is needed across production instances. |
+| Audit via pipeline observer/filter | Not implemented; transitions explicitly attach `WorkflowAuditActivity`. A pipeline observer/filter could centralize transition auditing, but would add indirection and must preserve the saga transaction. |
+| PostgreSQL/RabbitMQ Testcontainers | Deferred. The current tests use in-memory persistence and messaging; see [Tests](#tests). |
+| Manual-review authentication | Not implemented; approve/reject endpoints have no authentication or reviewer identity. See [Assumptions and shortcuts](#assumptions-and-shortcuts). |
+| Synchronous manual-review decision claim | Not implemented; atomically change `PendingManualReview` to an intermediate `ReviewSubmitted` status, add an audit entry, and publish the final decision through the outbox in the same database transaction. Use a conditional update that succeeds only while the application is still pending review, so exactly one concurrent reviewer wins; return a conflict to the loser. The saga then applies the final `Approved` or `Rejected` status asynchronously. |
+| JSON workflow definition | Not implemented; states and transitions are compiled into `ApplicationWorkflowStateMachine`. Supporting JSON would require schema validation and applying the configured definition at startup. |
+
+## Assumptions and shortcuts
+
+- The API and Worker validate the same application data independently. Their `DataValidation` settings must remain aligned; otherwise an application accepted by the API may fail later in the Worker.
+- Request validation does not mirror every database column length. Overlong applicant fields may pass request validation and fail during persistence instead of returning a field-level `400`.
+- Photos are accepted as base64 in the request and stored in PostgreSQL for this assessment. The quality score is a deterministic SHA-256-based demonstration rule, not an image-quality or identity-verification model.
+- The API applies EF migrations at startup. This is intended for a single local instance, not concurrent production instances.
+- Manual review has no authentication or reviewer identity recorded in the audit trail. The endpoints are suitable only for a trusted local/demo environment.
+- Retry policy is in-process; there is no delayed redelivery policy or built-in error-queue recovery workflow.
+- The test suite uses in-memory persistence and a test harness rather than real PostgreSQL/RabbitMQ integration tests.
+- Compose runs the API and Worker in `Development`; Swagger, metrics, and development-oriented telemetry settings should not be exposed unchanged in a production deployment.
+
+## Photo storage trade-offs
+
+Storing base64 photo data in a PostgreSQL `text` column keeps the assessment simple: the application and its photo are saved together, and consumers can process the same persisted record without a separate storage dependency. The trade-off is that base64 increases payload size, large values enlarge database backups and routine queries if they load full application entities, and database access now also grants access to sensitive identity imagery. The current solution is not a production photo-storage design and does not provide a complete retention or deletion policy.
+
+For production, accept bounded uploads, validate the file type and size, and store the image in private object storage rather than in the application row. Persist an opaque object key and relevant metadata (such as content type, size, checksum, and retention expiry) in PostgreSQL. Apply encryption, least-privilege access, short-lived access mechanisms, malware/content checks appropriate to the threat model, and a documented deletion/retention policy. Keep only the data needed by the workflow in database queries and messages.
+
+## AI assistance
+
+AI-assisted tools were used during research, planning and implementation. They supported specification and code work; the submitted implementation and its tests remain the author's responsibility. The repository's `.kiro/` specification and `AGENTS.md` are planning/development artifacts, not proof that every listed requirement or test was completed. The actual test coverage is described above; generated or planned work should not be treated as verified unless it is present in the code and passes the relevant tests. Total AI tooling cost is calculated at 10€.
+
+## Production improvements
+
+Before production use, prioritize:
+
+1. Retain terminal saga identity or add a durable status guard so replayed submissions cannot restart approved, rejected, or failed applications. Define explicit behavior for late and out-of-order events.
+2. Mirror database length constraints in request validation and return consistent `ProblemDetails` for persistence errors. Make manual decisions atomic and auditable: claim the pending-review state once, return a response that reflects asynchronous acceptance, and record the authenticated reviewer/actor.
+3. Add an authenticated and monitored recovery process for error queues, plus delayed redelivery for transient infrastructure failures. Document safe replay and ensure recovery cannot bypass current application state.
+4. Move photos to private object storage with request size limits, content validation, encryption, access controls, and retention/deletion handling.
+5. Run migrations with a dedicated role/job, tighten audit-table permissions, configure production environment settings, protect or disable Swagger/metrics, restrict management ports, and add health/readiness checks and operational alerts.
+6. Add integration tests against PostgreSQL and RabbitMQ for outbox/inbox behavior, concurrent manual-review requests, migrations, fault routing, and restart/recovery scenarios.
+7. Aggregate structured logs in a centralized logging platform with appropriate access controls, retention, and alerting; the current file sink is local/container-oriented.
+8. Store and rotate production credentials in a secrets manager rather than relying on local `.env` files.
